@@ -18,4 +18,3 @@ Documentation for the Space-Time Productions' Master Control Board
 <img src="images/MCB_4-4.JPG">
 
 ---
-
