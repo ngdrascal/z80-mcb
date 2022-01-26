@@ -1,0 +1,5 @@
+// To assemble using the zmac assembler
+./zmac -c -o ./zout/TinyBasic.hex -o ./zout/TinyBasic.lst TinyBasic.a80
+
+// To transfer to the EPROM emulator
+py EPROM_NG_v2.0rc3.py -mem 2716 -spi y -auto y ./zout/TinyBasic.hex com8
