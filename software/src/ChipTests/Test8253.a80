@@ -1,0 +1,18 @@
+;  To assemble: ./zmac -c -o ./zout/Test8253.hex -o ./zout/Test8253.lst Test8253.a80
+;  To send to ROM emulator: py EPROM_NG_v2.0rc3.py -mem 2716 -spi y -auto y ./zout/Test8253.hex com8
+
+I8253_CTRL      .EQU $6F
+I8253_CTR0      .EQU $6C
+I8253_CTR1      .EQU $6D
+I8253_CTR2      .EQU $6E 
+
+                .org 0000h
+start:
+        LD      A,$36               ; Counter 0: load lsb,msb; square wave, binary
+        OUT     (I8253_CTRL)        ; Send it to control port
+        LD      A,$0D               ; low order byte ($000D = 154kHz (9600 x 16)
+        OUT     (I8253_CTR0)        ; 
+        LD      A,$00               ; Send the rest; high order byte
+        OUT     (I8253_CTR0)        ;
+infinity:    
+        JMP     infinity            ; Wait here until reset

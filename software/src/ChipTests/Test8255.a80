@@ -1,0 +1,13 @@
+;  To assemble: ./zmac -c -o ./zout/Test8255.hex -o ./zout/Test8255.lst Test8255.a80
+;  To send to ROM emulator: py EPROM_NG_v2.0rc3.py -mem 2716 -spi y -auto y ./zout/Test8255.hex com8
+ 
+            .org 0000h
+start:
+    LD      A,$8B  ; Initialize the 8255 control port
+    OUT     ($63)  ;   Port-A = out, Port-B = in, Port-C = in
+loop:
+    IN      ($61)  ; Get the switch values from Port-B
+
+    OUT     ($60)  ; Output switch values to Port-A
+    JR loop
+   
