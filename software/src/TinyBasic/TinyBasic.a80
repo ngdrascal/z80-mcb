@@ -33,6 +33,16 @@ DWA     MACRO WHERE
         DB   (WHERE SHR 8) + 128
         DB   WHERE AND 0FFH
         ENDM
+
+SIOA_DATA       .EQU 74H
+SIOA_CMD        .EQU 76H
+SIOB_DATA       .EQU 75H
+SIOB_CMD        .EQU 77H
+
+I8253_CTRL      .EQU 6FH
+I8253_CNT0      .EQU 6CH
+I8253_CNT1      .EQU 6DH
+I8253_CNT2      .EQU 6EH       
 ;
         ORG  0H
 START:  LXI  SP,STACK                   ;*** COLD START ***
@@ -65,7 +75,7 @@ CRLF:   MVI  A,CR                       ;*** CRLF ***
         DB   'AN'
 ;
 SS1:    LDAX D                          ;*** IGNBLK/RST 5 ***
-        CPI  20H                        ;IGNORE BLANKS
+        CP   20H                        ;IGNORE BLANKS
         RNZ                             ;IN TEXT (WHERE DE->)
         INX  D                          ;AND RETURN THE FIRST
         JMP  SS1                        ;NON-BLANK CHAR. IN A
@@ -92,12 +102,12 @@ SS1:    LDAX D                          ;*** IGNBLK/RST 5 ***
         CALL SUBDE                      ;OF @(EXPR) AND PUT IT
         POP  D                          ;IN HL
         RET                             ;C FLAG IS CLEARED
-TV1:    CPI  1BH                        ;NOT @, IS IT A TO Z?
+TV1:    CP   1BH                        ;NOT @, IS IT A TO Z?
         CMC                             ;IF NOT RETURN C FLAG
         RC
         INX  D                          ;IF A THROUGH Z
         LXI  H,VARBGN                   ;COMPUTE ADDRESS OF
-        RLC                             ;THAT VARIABLE
+        RLCA                            ;THAT VARIABLE
         ADD  L                          ;AND RETURN IT IN HL
         MOV  L,A                        ;WITH C FLAG CLEARED
         MVI  A,0
@@ -124,9 +134,9 @@ TC2:    INX  D                          ;IF =, SKIP THOSE BYTES
 TSTNUM: LXI  H,0                        ;*** TSTNUM ***
         MOV  B,H                        ;TEST IF THE TEXT IS
         RST  5                          ;A NUMBER
-TN1:    CPI  30H                        ;IF NOT, RETURN 0 IN
+TN1:    CP   30H                        ;IF NOT, RETURN 0 IN
         RC                              ;B AND HL
-        CPI  3AH                        ;IF NUMBERS, CONVERT
+        CP   3AH                        ;IF NUMBERS, CONVERT
         RNC                             ;TO BINARY IN HL AND
         MVI  A,0F0H                     ;SET B TO # OF DIGITS
         ANA  H                          ;IF H>255, THERE IS NO
@@ -241,7 +251,7 @@ ST4:    POP  B                          ;GET READY TO INSERT
         LHLD TXTUNF                     ;BUT FIRST CHECK IF
         POP  PSW                        ;THE LENGTH OF NEW LINE
         PUSH H                          ;IS 3 (LINE # AND CR)
-        CPI  3                          ;THEN DO NOT INSERT
+        CP   3                          ;THEN DO NOT INSERT
         JZ   RSTART                     ;MUST CLEAR THE STACK
         ADD  L                          ;COMPUTE NEW TXTUNF
         MOV  L,A
@@ -679,7 +689,7 @@ IP4:    POP  PSW                        ;PURGE JUNK IN STACK
 IP5:    RST  6
 ;
 DEFLT:  LDAX D                          ;***  DEFLT ***
-        CPI  CR                         ;EMPTY LINE IS OK
+        CP   CR                         ;EMPTY LINE IS OK
         JZ   LT1                        ;ELSE IT IS 'LET'
 ;
 LET:    CALL SETVAL                     ;*** LET ***
@@ -1036,7 +1046,7 @@ FI1:    RST  1                          ;NOT ";", IS IT CR?
 FI2:    RET                             ;ELSE RETURN TO CALLER
 ;
 ENDCHK: RST  5                          ;*** ENDCHK ***
-        CPI  CR                         ;END WITH CR?
+        CP   CR                         ;END WITH CR?
         RZ                              ;OK, ELSE SAY: "WHAT?"
 ;
 QWHAT:  PUSH D                          ;*** QWHAT ***
@@ -1103,24 +1113,24 @@ GETLN:  RST  2                          ;*** GETLN ***
         LXI  D,BUFFER                   ;PROMPT AND INIT.
 GL1:    CALL CHKIO                      ;CHECK KEYBOARD
         JZ   GL1                        ;NO INPUT, WAIT
-        CPI  7FH                        ;DELETE LAST CHARACTER?
+        CP   7FH                        ;DELETE LAST CHARACTER?
         JZ   GL3                        ;YES
         RST  2                          ;INPUT, ECHO BACK
-        CPI  0AH                        ;IGNORE LF
+        CP   0AH                        ;IGNORE LF
         JZ   GL1
         ORA  A                          ;IGNORE NULL
         JZ   GL1
-        CPI  7DH                        ;DELETE THE WHOLE LINE?
+        CP   7DH                        ;DELETE THE WHOLE LINE?
         JZ   GL4                        ;YES
         STAX D                          ;ELSE SAVE INPUT
         INX  D                          ;AND BUMP POINTER
-        CPI  0DH                        ;WAS IT CR?
+        CP   0DH                        ;WAS IT CR?
         RZ                              ;YES, END OF LINE
         MOV  A,E                        ;ELSE MORE FREE ROOM?
-        CPI  BUFEND AND 0FFH
+        CP   BUFEND AND 0FFH
         JNZ  GL1                        ;YES, GET NEXT INPUT
 GL3:    MOV  A,E                        ;DELETE LAST CHARACTER
-        CPI  BUFFER AND 0FFH            ;BUT DO WE HAVE ANY?
+        CP   BUFFER AND 0FFH            ;BUT DO WE HAVE ANY?
         JZ   GL4                        ;NO, REDO WHOLE LINE
         DCX  D                          ;YES, BACKUP POINTER
         MVI  A,5CH                      ;AND ECHO A BACK-SLASH
@@ -1158,7 +1168,7 @@ FNDNXT:                                 ;*** FNDNXT ***
 FL2:    INX  D                          ;JUST PASSED BYTE 1 & 2
 ;
 FNDSKP: LDAX D                          ;*** FNDSKP ***
-        CPI  CR                         ;TRY TO FIND CR
+        CP   CR                         ;TRY TO FIND CR
         JNZ  FL2                        ;KEEP LOOKING
         INX  D                          ;FOUND CR, SKIP OVER
         JMP  FL1                        ;CHECK IF END OF TEXT
@@ -1193,7 +1203,7 @@ PS1:    LDAX D                          ;GET A CHARACTER
         CMP  B                          ;SAME AS OLD A?
         RZ                              ;YES, RETURN
         RST  2                          ;ELSE PRINT IT
-        CPI  CR                         ;WAS IT A CR?
+        CP   CR                         ;WAS IT A CR?
         JNZ  PS1                        ;NO, NEXT
         RET                             ;YES, RETURN
 ;
@@ -1202,7 +1212,7 @@ QTSTG:  RST  1                          ;*** QTSTG ***
         DB   QT3-$-1
         MVI  A,22H                      ;IT IS A "
 QT1:    CALL PRTSTG                     ;PRINT UNTIL ANOTHER
-        CPI  CR                         ;WAS LAST ONE A CR?
+        CP   CR                         ;WAS LAST ONE A CR?
         POP  H                          ;RETURN ADDRESS
         JZ   RUNNXL                     ;WAS CR, RUN NEXT LINE
 QT2:    INX  H                          ;SKIP 3 BYTES ON RETURN
@@ -1257,7 +1267,7 @@ PN5:    MOV  A,B                        ;PRINT SIGN
         CNZ  10H
         MOV  E,L                        ;LAST REMAINDER IN E
 PN6:    MOV  A,E                        ;CHECK DIGIT IN E
-        CPI  0AH                        ;10 IS FLAG FOR NO MORE
+        CP   0AH                        ;10 IS FLAG FOR NO MORE
         POP  D
         RZ                              ;IF SO, RETURN
         ADI  30H                        ;ELSE CONVERT TO ASCII
@@ -1374,12 +1384,43 @@ PU1:    PUSH H
 ;OUTC:  PUSH PSW                        ;THIS IS AT LOC. 10
 ;       LDA  OCSW                       ;CHECK SOFTWARE SWITCH
 ;       ORA  A
-INIT:   STA  OCSW
-        MVI  A,4EH                      ;Initialize 8251A UART -- 3 is status port
-        OUT  3				;1 stop bit, no parity, 8-bit char, 16x baud
-        MVI  A,37H			;enable receive and transmit
-        OUT  3
-        MVI  D,19H
+
+INIT:
+init8253:
+        LD      A,36H               ; Set counter 0 to square wave, binary and prepare to load
+        OUT     (I8253_CTRL)
+        LD      A,0DH               ; low order byte ($0D00 = 154kHz (9600 x 16)
+        OUT     (I8253_CNT0)
+        LD      A,00H               ; Send the rest; high order byte
+        OUT     (I8253_CNT0)
+
+initSIO:
+        ; Channel B
+        LD   A,00H                      ; select WR0
+        OUT  (SIOB_CMD),A
+        LD   A,18H                      ; channel reset
+        OUT  (SIOB_CMD),A
+
+        LD   A,04H                      ; select WR4
+        OUT  (SIOB_CMD),A
+        LD   A,44H                      ; $44 = Clock-Mode: 16x; Stop-Bits: 1; Parity: none
+        OUT  (SIOB_CMD),A
+
+        LD   A,01H                      ; select WR1
+        OUT  (SIOB_CMD),A
+        LD   A,00H                      ; $00 = waiting: off; interrupts: off
+        OUT  (SIOB_CMD),A
+
+        LD   A,03H                      ; select WR3
+        OUT  (SIOB_CMD),A
+        LD   A,0E1H                     ; $E1 = Rx 8 bits/char; Auto-Enables is true; Rx-Enabled = true;
+        OUT  (SIOB_CMD),A
+
+        LD   A,05H                      ; select WR5
+        OUT  (SIOB_CMD),A
+        LD   A,68H                      ; $EA = DTR = false; Tx 8 bits/chars; Send-Break = false; Tx = true; RTS = false
+        OUT  (SIOB_CMD),A
+
 PATLOP:
         CALL CRLF
         DCR  D
@@ -1392,37 +1433,38 @@ PATLOP:
         LXI  H,TXTBGN
         SHLD TXTUNF
         JMP  RSTART
+
 OC2:    JNZ  OC3                        ;IT IS ON
         POP  PSW                        ;IT IS OFF
         RET                             ;RESTORE AF AND RETURN
-OC3:    IN   3                          ;Check status
-        ANI  1H                         ;STATUS BIT
-        JZ   OC3                        ;NOT READY, WAIT
-        POP  PSW                        ;READY, GET OLD A BACK
-        OUT  2                          ;Out to data port
-        CPI  CR                         ;WAS IT CR?
-        RNZ                             ;NO, FINISHED
-        MVI  A,LF                       ;YES, WE SEND LF TOO
+OC3:    IN   A,(SIOB_CMD)               ;Check status
+        BIT  2,A                        ;STATUS BIT
+        JP   Z,OC3                      ;NOT READY, WAIT
+        POP  AF                         ;READY, GET OLD A BACK
+        OUT  (SIOB_DATA),A              ;Out to data port
+        CP   CR                         ;WAS IT CR?
+        RET  NZ                         ;NO, FINISHED
+        LD   A,LF                       ;YES, WE SEND LF TOO
         RST  2                          ;THIS IS RECURSIVE
-        MVI  A,CR                       ;GET CR BACK IN A
+        LD   A,CR                       ;GET CR BACK IN A
         RET
 ;
-CHKIO:  IN   3                         ;*** CHKIO ***
+CHKIO:  IN   (SIOB_CMD)                ;*** CHKIO ***
         NOP                             ;STATUS BIT FLIPPED?
-        ANI  2H                         ;MASK STATUS BIT
-        RZ                              ;NOT READY, RETURN "Z"
-        IN   2                         ;READY, READ DATA
-        ANI  7FH                        ;MASK BIT 7 OFF
-        CPI  0FH                        ;IS IT CONTROL-O?
-        JNZ  CI1                        ;NO, MORE CHECKING
-        LDA  OCSW                       ;CONTROL-O FLIPS OCSW
-        CMA                             ;ON TO OFF, OFF TO ON
-        STA  OCSW
-        JMP  CHKIO                      ;GET ANOTHER INPUT
-CI1:    CPI  3H                         ;IS IT CONTROL-C?
-        RNZ                             ;NO, RETURN "NZ"
-        JMP  RSTART                     ;YES, RESTART TBI
-;
+        BIT  0,A                        ;MASK STATUS BIT
+        RET  Z                          ;NOT READY, RETURN "Z"
+        IN   (SIOB_DATA)                ;READY, READ DATA
+        AND  7FH                        ;MASK BIT 7 OFF
+        CP   0FH                        ;IS IT CONTROL-O?
+        JP   NZ,CI1                     ;NO, MORE CHECKING
+        LD   A,(OCSW)                   ;CONTROL-O FLIPS OCSW
+        CPL                             ;ON TO OFF, OFF TO ON
+        LD   (OCSW),A
+        JP   CHKIO                      ;GET ANOTHER INPUT
+CI1:    CP   03H                        ;IS IT CONTROL-C?
+        RET  NZ                         ;NO, RETURN "NZ"
+        JP   RSTART                     ;YES, RESTART TBI
+
 MSG1:   DB   'TINY '
         DB   'BASIC'
         DB   CR
@@ -1527,7 +1569,7 @@ EX0:    RST  5                          ;IGNORE LEADING BLANKS
         PUSH D                          ;SAVE POINTER
 EX1:    LDAX D                          ;IF FOUND '.' IN STRING
         INX  D                          ;BEFORE ANY MISMATCH
-        CPI  2EH                        ;WE DECLARE A MATCH
+        CP   2EH                        ;WE DECLARE A MATCH
         JZ   EX3
         INX  H                          ;HL->TABLE
         CMP  M                          ;IF MATCH, TEST NEXT
@@ -1556,7 +1598,7 @@ EX5:    MOV  A,M                        ;LOAD HL WITH THE JUMP
 ;
 LSTROM:                                 ;ALL ABOVE CAN BE ROM
 ;       ORG  1000H                      ;HERE DOWN MUST BE RAM
-        ORG  0800H
+        ORG  3000H
 OCSW:   DS   1                          ;SWITCH FOR OUTPUT
 CURRNT: DS   2                          ;POINTS TO CURRENT LINE
 STKGOS: DS   2                          ;SAVES SP IN 'GOSUB'
@@ -1572,7 +1614,7 @@ TXTUNF: DS   2                          ;->UNFILLED TEXT AREA
 TXTBGN: DS   2                          ;TEXT SAVE AREA BEGINS
 ;       ORG  1366H
 ;       ORG  1F00H
-	ORG  0F00H			;for 2K RAM
+	ORG  3400H			;for 2K RAM
 TXTEND: DS   0                          ;TEXT SAVE AREA ENDS
 VARBGN: DS   55                         ;VARIABLE @(0)
 BUFFER: DS   64                         ;INPUT BUFFER
@@ -1580,7 +1622,7 @@ BUFEND: DS   1                          ;BUFFER ENDS
 STKLMT: DS   1                          ;TOP LIMIT FOR STACK
 ;       ORG  1400H
 ;       ORG  2000H
-	ORG  1000H			;for 4K system -- 2k ROM, 2K RAM
+	ORG  37FFH			;for 4K system -- 2k ROM, 2K RAM
 STACK:  DS   0                          ;STACK STARTS HERE
 ;
 CR      EQU  0DH
