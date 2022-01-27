@@ -1,5 +1,5 @@
-;  To assemble: ./zmac -c -o ./zout/Test8255.hex -o ./zout/Test8255.lst Test8255.a80
-;  To send to ROM emulator: py EPROM_NG_v2.0rc3.py -mem 2716 -spi y -auto y ./zout/Test8255.hex com8
+;  To assemble: ./zmac -c -o ./Test8255.hex -o ./zout/Test8255.lst Test8255.a80
+;  To send to ROM emulator: py EPROM_NG_v2.0rc3.py -mem 2716 -spi y -auto y ./Test8255.hex com8
  
             .org 0000h
 start:

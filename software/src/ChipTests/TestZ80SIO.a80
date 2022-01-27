@@ -1,5 +1,5 @@
-;  To assemble: ./zmac -c -o ./zout/TestZ80SIO.hex -o ./zout/TestZ80SIO.lst TestZ80SIO.a80
-;  To send to ROM emulator: py EPROM_NG_v2.0rc3.py -mem 2716 -spi y -auto y ./zout/TestZ80SIO.hex com8
+;  To assemble: ./zmac -c -o ./TestZ80SIO.hex -o ./zout/TestZ80SIO.lst TestZ80SIO.a80
+;  To send to ROM emulator: py EPROM_NG_v2.0rc3.py -mem 2716 -spi y -auto y ./TestZ80SIO.hex com8
 
 SIOA_DATA       .EQU $74
 SIOA_CMD        .EQU $76
@@ -21,7 +21,7 @@ initStack:
 init8253:
         LD      A,$36               ; Set counter 0 to square wave, binary and prepare to load
         OUT     (I8253_CTRL)
-        LD      A,$0D               ; low order byte ($0D00 = 154kHz (9600 x 16)
+        LD      A,$0D               ; low order byte ($00D0 = 154kHz (9600 x 16)
         OUT     (I8253_CNT0)
         LD      A,$00               ; Send the rest; high order byte
         OUT     (I8253_CNT0)
