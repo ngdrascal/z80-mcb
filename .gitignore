@@ -1,5 +1,1 @@
-software/src/TinyBasic/zmac.exe
-software/src/TinyBasic/zout
-software/src/ChipTests/zmac.exe
-software/src/ChipTests/zout
-software/src/TinyBasic/EPROM_NG_v2.0rc3.py
+software/tools/**

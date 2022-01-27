@@ -1,5 +1,5 @@
-;  To assemble: ./zmac -c -o ./TestZ80SIO.hex -o ./zout/TestZ80SIO.lst TestZ80SIO.a80
-;  To send to ROM emulator: py EPROM_NG_v2.0rc3.py -mem 2716 -spi y -auto y ./TestZ80SIO.hex com8
+;  To assemble: ../../tools/zmac -c -o ./TestZ80SIO.hex -o ../../tools/zout/TestZ80SIO.lst TestZ80SIO.a80
+;  To send to ROM emulator: py ../../tools/EPROM_NG_v2.0rc3.py -mem 2716 -spi y -auto y ./TestZ80SIO.hex com8
 
 SIOA_DATA       .EQU $74
 SIOA_CMD        .EQU $76
