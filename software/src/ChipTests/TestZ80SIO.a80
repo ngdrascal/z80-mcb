@@ -20,11 +20,11 @@ initStack:
 
 init8253:
         LD      A,$36               ; Set counter 0 to square wave, binary and prepare to load
-        OUT     (I8253_CTRL)
+        OUT     (I8253_CTRL),A
         LD      A,$0D               ; low order byte ($00D0 = 154kHz (9600 x 16)
-        OUT     (I8253_CNT0)
+        OUT     (I8253_CNT0),A
         LD      A,$00               ; Send the rest; high order byte
-        OUT     (I8253_CNT0)
+        OUT     (I8253_CNT0),A
 
 initSIO:
         ; Channel B
@@ -75,7 +75,7 @@ initSIO:
 infinity:
         CALL    rxCharB             ; output- A reg: character from input
         CALL    txCharB             ; input-  A reg: has character to output
-        JMP     infinity
+        JP      infinity
 
 ;===============================================================================
 ; Description:
