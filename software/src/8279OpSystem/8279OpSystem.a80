@@ -1,0 +1,1324 @@
+;-------------------------------------------------------------------------------
+; Disassembly of the file "8279.bin"
+; Commented Dec 17th, 2004 Joel Owens
+; Space-Time Productions 8279 Operating Monitor Rom
+;-------------------------------------------------------------------------------
+; 8279-BASED OPERATING SYSTEM, MONITOR AND EPROM PROGRAMMER
+;  See keypad photo on site www.joelowens.org
+;
+;-------------------------------------------------------------------------------
+; RST 00
+;-------------------------------------------------------------------------------
+        LD   SP,$3FF2                   ; Load SP near RAMTOP
+        RST  $38                        ; Call to INTerrupt vector
+        RST  $00                        ; Reset if early RETurn
+L0005:
+        JP   L0005                      ; Hang up here if there's a problem
+;-------------------------------------------------------------------------------
+; RST 08 - Get a key from the 8279 IC
+;-------------------------------------------------------------------------------
+        IN   A,($79)                    ; Retrieve the status word
+        AND  $07                        ; Strip off all but # keys in buffer
+        RET  Z                          ; Return if nothing ready
+
+        IN   A,($78)                    ; Get the pressed key
+        RET                             ; And go back
+;-------------------------------------------------------------------------------
+; RST 10 - Filter the input rows, final output is S S S R R (scan #, return #)
+;-------------------------------------------------------------------------------
+        RRA                             ; CY D7 D6 D5  D4 D3 D2 D1  CY=D0
+        RRA                             ; D0 CY D7 D6  D5 D4 D3 D2  CY=D1
+        RRA                             ; D1 D0 CY D7  D6 D5 D4 D3  CY=D2
+        RLCA                            ; D0 CY D7 D6  D5 D4 D3 D1  CY=D1
+        RLCA                            ; CY D7 D6 D5  D4 D3 D1 D0  CY=D0
+        AND  $1F                        ; -- -- -- D5  D4 D3 D1 D0  CY=$00
+        RET                             ; Discards hi Return bit, keeps 3 scans
+;-------------------------------------------------------------------------------
+; RST 18 - Get a key from the 8279
+;-------------------------------------------------------------------------------
+L0018:
+        RST  $08                        ; Get the key
+        JR   Z,L0018                    ; Loop until key is down
+        RST  $10                        ; Process the key
+        CP   $17
+        RET  NZ
+
+        RST  $18
+;-------------------------------------------------------------------------------
+; RST 20 - not used as a Restart
+;-------------------------------------------------------------------------------
+        ADD  A,$18
+        RET  
+
+L0023:
+        JR   L0023                      ; This is an endless loop right here
+;-------------------------------------------------------------------------------
+; Prints (DE) characters to 8279 display, starting at (DE+01)
+;-------------------------------------------------------------------------------
+L0025:
+        LD   A,(DE)                     ; Get byte count
+        INC  DE                         ; Point to first character
+        LD   B,A                        ; Save the byte count
+;-------------------------------------------------------------------------------
+; RST 28 - PRINT CHARACTERS AT (DE) TO 8279 DISPLAY
+;-------------------------------------------------------------------------------
+L0028:
+        LD   A,(DE)                     ; Get the character
+        INC  DE                         ; Point to next
+        OUT  ($78),A                    ; Output the character direct
+        DJNZ L0028                      ; And repeat until done
+        RET  
+        NOP  
+;-------------------------------------------------------------------------------
+; RST 30
+;-------------------------------------------------------------------------------
+        LD   DE,$0000                   ; Clear DE
+        JP   L02EA                      ; Get a value from user into DE
+L0036:
+        JR   L0036                      ; Hung in this loop forever and a day
+;-------------------------------------------------------------------------------
+; RST 38 - INTerrupt vector
+;-------------------------------------------------------------------------------
+L0038:
+        DI                              ; Disable further INTerrupts
+        PUSH AF                         ; Save all register contents to Stack
+        PUSH BC
+        PUSH DE
+        PUSH HL
+        PUSH IX
+        PUSH IY
+        EXX  
+        EX   AF,AF'
+        PUSH AF
+        PUSH BC
+        PUSH DE
+        PUSH HL
+        CALL L0343
+        JP   L0068
+        LD   HL,$0017
+        ADD  HL,SP
+        LD   (HL),D                     ; Store user stack value to HL
+        DEC  HL
+        LD   (HL),E
+        POP  HL                         ; Pop all user register values off stack
+        POP  HL
+        POP  DE
+        POP  BC
+        POP  AF
+        EX   AF,AF'
+        EXX  
+        POP  IY
+        POP  IX
+        POP  HL
+        POP  DE
+        POP  BC
+        POP  AF
+        EI                              ; Enable Interrupts
+        RET                             ; Execute User Jump address as a RETurn
+;-------------------------------------------------------------------------------
+        NOP  
+        JR   L0038                      ; Process NMI the same as an INT Mode 1
+;-------------------------------------------------------------------------------
+L0068:
+        LD   HL,$035C                   ; Address for "HELLO" message
+        JR   L0071                      ; and print it
+L006D:
+        POP  BC
+        LD   HL,$0365                   ; Address for "ERROR" message
+L0071:
+        PUSH DE                         ; Save old DE value
+        EX   DE,HL                      ; Get print address into DE
+        CALL L0025                      ; Print (DE) chars fro (DE+01) pointer
+        POP  DE                         ; Retrieve old DE
+        LD   BC,$0077                   ; Save This location as return address
+        PUSH BC                         ; onto stack
+        RST  $18                        ; Wait for a key from 8279
+L007C:
+        CP   $3C
+        JR   NC,L006D                   ; Must be a bad key, call it "ERROR"
+        CP   $10
+        JR   C,L0091                    ; 
+        SUB  $10                        ; Key is a command key, reduce to absolute value
+        ADD  A,A                        ; Double it
+        ADD  A,$96                      ; and set it to the jump vector start
+        LD   H,$00                      ; Address will start at $0096 and increase 
+        LD   L,A                        ; Set lower part of address
+        LD   C,(HL)                     ; Save this address into BC
+        INC  HL
+        LD   B,(HL)
+        PUSH BC                         ; And push it onto the stack, causing it to
+        RET                             ; Become the "jump-to" address in the menu
+					; Very clever, indeed.
+;-------------------------------------------------------------------------------
+L0091:
+        CALL L0309
+        JR   L007C                      ; Hmm, it must be another "ERROR"
+;-------------------------------------------------------------------------------
+; COMMAND VECTOR TABLE
+;-------------------------------------------------------------------------------
+	.DW $02D1	; $00=$02D1 "INPUT" from port	
+	.DW $0119	; $01=$0119 "DSP R" - Registers		
+	.DW $0054	; $02=$0054 "CONT" continue Command
+	.DW $006D	; $03=$006D "INCR" ERROR
+	.DW $006D	; $04=$006D "WRITE" ERROR
+	.DW $00F0	; $05=$00F0 "DSP M" display memory
+	.DW $0352	; $06=$0352 "CANCL" clear the display
+	.DW $006D	; $07=$006D "SHIFT" key location, no key
+	.DW $01F5	; $08=$01F5 - "PAR 0" store DE to $3FF2
+	.DW $01FC	; $09=$01FC - "BEGIN" store DE to $3FF4
+	.DW $0202	; $0A=$0202 - "END"   store DE to $3FF6
+	.DW $0208	; $0B=$0208 - "DEST"  store DE to $3FF8
+	.DW $0276	; $0C=$0276 - "FIL M" fill memory
+	.DW $026D	; $0D=$026D - "MOV M" move memory
+	.DW $0284	; $0E=$0284 - "CMP M" compare mem
+	.DW $0242	; $0F=$0242 - "TST M" test memory
+	.DW $021D	; $10=$021D - "OX AC" ?
+	.DW $025C	; $11=$025C - "INV M" Invert Memory
+	.DW $01CA	; $12=$01CA - "SBK A" Set Breakpoint A
+	.DW $01D4	; $13=$01D4 - "SBK B" Set Breakpoint B
+	.DW $020E	; $14=$020E - "END +B"
+	.DW $0214	; $15=$0214 - "END -B"
+	.DW $01E5	; $16=$01E5 - "RBK A" Clear Breakpoint A
+	.DW $01ED	; $17=$01ED - "RBK B" Clear Breakpoint B
+	.DW $02D6	; $18=$02D6 "OUTPUT" to port
+	.DW $02B2	; $19=$02B2 "DSP S" Get USER SP value
+	.DW $004D	; $1A=$004D "GO" command
+	.DW $006D	; $1B=$006D "DECR" ERROR
+	.DW $006D	; $1C=$006D "INSERT" ERROR
+	.DW $1000	; $1D=$1000 "NX PM" ROM 2 VECTOR
+	.DW $0352	; $1E=$0352 "CLEAR" the display
+	.DW $006D	; $1F=$006D "SHIFT" key location, no key ERROR
+	.DW $0400	; $20=$0400 BURN PROM FROM DATA $3000-$33FF
+	.DW $040D	; $21=$040D BURN PROM FROM DATA $2000-$27FF (2K)
+	.DW $041A	; $22=$041A BURN PROM FROM DATA $1800-$3FFF (4K)
+	.DW $0427	; $23=$0427 BURN PROM FROM DATA $4000-$9FFF (8K)
+	.DW $0440	; $24=$0440
+	.DW $04B5	; $25=$04B5
+	.DW $049C	; $26=$049C
+	.DW $05FC	; $27=$05FC
+	.DW $0632	; $28=$0632
+	.DW $0638	; $29=$0638
+	.DW $04CB	; $2A=$04CB
+	.DW $06F8	; $2B=$06F8
+	.DW $006D	; $2C=$006D ERROR
+;-------------------------------------------------------------------------------
+; A command vectors to this point
+        EX   DE,HL                      ; MOVES DE TO HL, HL TO DE
+        DEC  HL                         ; INTERESTING MUCKING AROUND
+L00F2:
+        INC  HL                         ; WITH HL CONTENTS
+        INC  HL
+L00F4:
+        DEC  HL
+        CALL L0319                      ; SEND CONTENTS OF HL TO 8279 DISPLAY
+        RST  $30                        ; GET A KEY AND DISPLAY VALUE
+L00F9:
+        CP   $13
+        JR   Z,L00F2                    ; Next HL location
+
+        CP   $2B
+        JR   Z,L00F4                    ;
+
+        CP   $2C
+        JR   Z,L010D                    ;
+
+        CP   $14
+        JP   NZ,L007C                   ; MUST BE A NON-VALID KEY, ERROR
+
+        LD   (HL),E                     ; 
+        JR   L00F2                      ;
+L010D:
+        LD   A,(HL)
+        LD   (HL),E
+        LD   E,A
+        INC  HL
+        CALL L0319                      ; SEND CONTENTS OF HL TO DISPLAY
+        CALL L02EA
+        JR   L00F9                      ; 
+;-------------------------------------------------------------------------------
+        LD   HL,$0018                   ; GET AWAY FROM REGISTER STORAGE AREA
+        ADD  HL,SP                      ; ADD THAT TO STACK
+        LD   DE,$0191                   ; TABLE FOR CHARACTERS
+L0120:
+        LD   A,(DE)                     ; LOAD A CHARACTER
+        CP   $FF                        ; IS IT AT END OF LIST?
+        JP   Z,L0352                    ; PAST END
+        DEC  HL
+        LD   C,(HL)                     ; LOAD SPOT AT USER STACK
+        LD   A,(DE)                     ; GET THE CHARACTER
+        CP   $58
+        JR   NZ,L0155
+        INC  DE
+        DEC  HL
+        PUSH HL
+        LD   L,(HL)
+        LD   H,C
+        LD   B,$03
+        RST  $28                        ; PRINT # B OF (DE) LOCATIONS CHARS
+        CALL L033E                      ; SEND ONE "-" TO DISPLAY
+        CALL L0322                      ; SEND CONTENTS OF HL TO DISPLAY
+        PUSH DE
+        CALL L016E
+        POP  BC
+        POP  HL
+        JP   C,L0352                    ; CLEAR THE DISPLAY
+        JR   NZ,L014E                   ;
+        INC  HL
+        LD   (HL),D
+        DEC  HL
+        LD   (HL),E
+L014A:
+        PUSH BC
+        POP  DE
+        JR   L0120                      ;
+L014E:
+        CP   $13
+        JP   NZ,L007C
+        JR   L014A                      ;
+L0155:
+        LD   B,$03
+        RST  $28                        ; PRINT # B OF (DE) LOCATION CHARS
+        CALL L033B                      ; SEND TWO "--" TO THE DISPLAY
+        CALL L033E                      ; SEND ONE "-" TO THE DISPLAY
+        CALL L030E                      ; CONVERT A TO CHARS AND DISPLAY
+        PUSH DE
+        CALL L016E
+        POP  BC
+        JP   C,L0352                    ; CLEAR THE DISPLAY
+        JR   NZ,L014E                   ;
+        LD   (HL),E
+        JR   L014A                      ;
+L016E:
+        CALL L0018
+        CP   $10
+        JR   C,L0183                    ;
+        LD   DE,$0000                   ; CLEAR DE CONTENTS
+        CP   $14
+        RET  Z
+
+        CP   $16
+        JR   Z,L018F                    ;
+
+        AND  A
+        PUSH HL
+        POP  DE
+        RET  
+
+L0183:
+        CALL L0309
+        CP   $16
+        JR   Z,L018F                    ; (+$05)
+        CP   $14
+        RET  Z
+
+        AND  A
+        RET  
+
+L018F:
+        SCF  
+        RET  
+;-------------------------------------------------------------------------------
+; TABLE OF CHARACTERS FOR REGISTER LIST
+;-------------------------------------------------------------------------------
+;            00  01  02  03  04  05  06  07  08  09  0A  0B  0C  0D  0E  0F
+	    .DB     $58,$8F,$C3,$08,$88,$9F,$08,$88,$8B,$08,$88,$DA,$08,$88,$CE
+;                     P   C   -   R   A   -   R   F   -   R   B   -   R   C
+           
+	    .DB $08,$88,$DC,$08,$88,$CB,$08,$58,$88,$9E,$C2,$58,$88,$14,$1A,$58
+;             -   R   D   -   R   E   -   c   R   H   L   c   R   1   /   c
+     
+	    .DB $88,$14,$1E,$88,$9F,$02,$88,$8B,$02,$88,$DA,$02,$88,$C3,$02,$88
+;             R   1   4   R   A   '   R   F   '   R   B   '   R   C   '   R
+     
+	    .DB $DC,$02,$88,$CB,$02,$58,$9E,$C2,$02,$FF
+;             D   '   R   E   '   c   H   L   '  END OF CHARACTER LIST
+;-------------------------------------------------------------------------------                               
+; Set Breakpoint A
+;-------------------------------------------------------------------------------
+        LD   ($3FFD),DE                 ; Get breakpoint address 
+        LD   A,(DE)                     ; Get current data at Brk location
+        LD   ($3FFF),A                  ; Store contents of Breakpoint byte
+        JR   L01DC                      ; Continue to display HL
+;-------------------------------------------------------------------------------
+; Set Breakpoint B
+;-------------------------------------------------------------------------------
+        LD   ($3FFA),DE                 ; A second breakpoint?
+        LD   A,(DE)                     ; Get brkpnt byte
+        LD   ($3FFC),A                  ; Save it also
+L01DC:
+        EX   DE,HL                      ; Breakpoint to HL
+        LD   A,$FF                      ; Get code for RST 38 (break)
+L01DF:
+        LD   (HL),A                     ; Store a RST 38 in it's place
+        CALL L0319                      ; SEND CONTENTS OF HL TO DISPLAY
+        EX   DE,HL                      ; Get DE back
+        RET  
+;-------------------------------------------------------------------------------
+; Clear Breakpoint A
+;-------------------------------------------------------------------------------
+        LD   HL,($3FFD)                 ; Restore data to former Breakpoint
+        LD   A,($3FFF)                  ; Get former data
+        JR   L01DF                      ; And continue to restore
+;-------------------------------------------------------------------------------
+; Clear Breakpoint B
+;-------------------------------------------------------------------------------
+        LD   HL,($3FFA)                 ; Restore second breakpoint
+        LD   A,($3FFC)                  ; Get original data
+        JR   L01DF                      ; And continue to restore
+;-------------------------------------------------------------------------------
+;
+;-------------------------------------------------------------------------------
+        LD   ($3FF2),DE                 ; Store DE contents
+L01F9:
+        JP   L0352                      ; Clear the display to all zeros
+
+        LD   ($3FF4),DE                 ; Store DE contents
+        JR   L01F9                      ; Clear the display to all zeros
+
+        LD   ($3FF6),DE                 ; Store DE contents
+        JR   L01F9                      ; Clear the display to all zeros
+
+        LD   ($3FF8),DE                 ; Store DE contents
+        JR   L01F9                      ; Clear the display to all zeros
+;-------------------------------------------------------------------------------
+; "END +B"
+;-------------------------------------------------------------------------------
+        CALL L02A3                      ; Retrieve DE and HL from high storage
+        ADD  HL,DE                      ; Add the values together
+        JR   L0219                      ; 
+;-------------------------------------------------------------------------------
+; "END -B"
+;-------------------------------------------------------------------------------
+        CALL L02A3                      ; Retrieve DE and HL from high storage
+        SBC  HL,DE
+L0219:
+        EX   DE,HL
+        JP   L0329                      ; Send 4 "----" to display
+;-------------------------------------------------------------------------------
+; "OX AC"
+;-------------------------------------------------------------------------------
+        LD   A,D
+        LD   C,$20
+        CALL L0226
+        LD   A,E
+        LD   C,$00
+L0226:
+        RRCA 
+        LD   B,A
+        AND  $60                        ; 0110 0000 B
+        CALL L0238
+        CALL L0237                      ; Convert A to display
+        CALL L0237                      ; Convert A to display
+        LD   A,C                        ; Write C contents to 8279
+        OUT  ($78),A                    ; Display direct
+        RET  
+;-------------------------------------------------------------------------------
+L0237:
+        LD   B,A                        ; Save A
+L0238:
+        SRL  A
+        CALL L036E                      ; Convert A to display
+        LD   A,B                        ; Save B
+        RLCA 
+        RLCA 
+        RLCA 
+        RET  
+;-------------------------------------------------------------------------------
+        CALL L02A3                      ; Retrieve DE and HL from high storage
+        POP  IX
+        EX   DE,HL
+L0248:
+        LD   A,(HL)
+        LD   B,A
+        CPL  
+        LD   (HL),A
+        XOR  (HL)
+        LD   (HL),B
+        JR   NZ,L0256                   ; 
+
+        CALL L02AC
+        INC  HL                         ; Next location
+        JR   NZ,L0248                   ; 
+
+L0256:
+        CALL L0319                      ; SEND CONTENTS OF HL TO DISPLAY
+        EX   DE,HL
+        JP   (IX)
+;-------------------------------------------------------------------------------
+; Invert Memory
+;-------------------------------------------------------------------------------
+        CALL L02A3                      ; Retrieve DE and HL from high storage
+        POP  IX
+        EX   DE,HL                      ; Swap source, destination
+L0262:
+        LD   A,(HL)                     ; Get data from source
+        CPL                             ; Invert the 1's and 0's
+        LD   (HL),A                     ; Write it back
+        CALL L02AC                      ; Compare HL-DE
+        INC  HL                         ; Next location
+        JR   NZ,L0262                   ; Repeat invert if not done
+        JR   L0256                      ; Send HL contents to display
+;-------------------------------------------------------------------------------
+; "MOV M" - Move Memory from xxxx thru yyyy until BC=0
+;-------------------------------------------------------------------------------
+        CALL L0296                      ; Retrieve DE,HL and get byte count BC
+        POP  IX
+        LDIR                            ; Perform the move
+        JR   L0256                      ; Send HL to display
+;-------------------------------------------------------------------------------
+; "FIL M" - Fill memory with contents E
+;-------------------------------------------------------------------------------
+        CALL L0296                      ; Retrieve DE,HL and get byte count BC
+        POP  IX
+L027B:
+        LD   (HL),E                     ; Store contents of E to (HL)
+        INC  HL                         ; Next memory location
+        DEC  BC                         ; Decrement byte count,
+        LD   A,B                        ; Until BC=0
+        OR   C                          ; test for zero
+        JR   NZ,L027B                   ; Continue writing E to (HL)
+        JR   L0256                      ; Send HL to display
+;-------------------------------------------------------------------------------
+; "CMP M" - Compare memory
+;-------------------------------------------------------------------------------
+        CALL L0296                      ; Retrieve DE,HL and get byte count BC
+        POP  IX
+L0289:
+        LD   A,(DE)                     ; Compare (DE)-(HL)
+        CP   (HL)                       ; Do the compare
+        JR   NZ,L0256                   ; If not zero, disp HL
+        INC  DE                         ; Increment next (DE) location
+        INC  HL                         ; Increment next (HL) location
+        DEC  BC                         ; Decrement byte counter (BC)
+        LD   A,B                        ; Test BC=0
+        OR   C                          ; Z set if BC=0
+        JR   NZ,L0289                   ; Continue compare until BC=0
+        JR   L0256                      ; Send contents of HL to display
+;-------------------------------------------------------------------------------
+L0296:
+        CALL L02A3                      ; Retrieve DE and HL from high storage
+        SBC  HL,DE                      ; Create a byte count difference
+        INC  HL                         ; Increment it to count last location
+        PUSH HL                         ; Save it to
+        POP  BC                         ; BC register pair
+        LD   HL,($3FF8)                 ; Get parameter into HL
+        EX   DE,HL                      ; and swap it to DE
+        RET  
+;-------------------------------------------------------------------------------
+L02A3:
+        LD   DE,($3FF4)                 ; Start of ROM data source
+        LD   HL,($3FF6)                 ; End of ROM data source
+        AND  A                          ; Clear all flags
+        RET  
+;-------------------------------------------------------------------------------
+; CPHLDE HL-DE, sets Z if equal
+;-------------------------------------------------------------------------------
+L02AC:
+        LD   A,H                        ; Check H into A
+        CP   D                          ; H-D
+        RET  NZ                         ; If the high order is <>, then exit
+
+        LD   A,L                        ; Else, check the low order to be sure
+        CP   E                          ; L-E, sets zero flag if HL=DE
+        RET  
+;-------------------------------------------------------------------------------
+;
+;-------------------------------------------------------------------------------
+        LD   HL,$0018                   ; Get user SP address
+        ADD  HL,SP
+        LD   A,$5B                      ; Send "S" to display
+        OUT  ($78),A
+        LD   A,$8F                      ; Send "P" to display
+        OUT  ($78),A
+        CALL L033B                      ; Send two "--" to display
+        CALL L0322                      ; Send contents of HL to display
+        CALL L016E
+        JP   C,L0352                    ; Clear the display
+        JP   NZ,L007C
+        EX   DE,HL                      ; DE into HL
+        LD   SP,HL                      ; Sets SP from HL
+        RST  $38                        ; Break
+        RST  $00                        ; Reset
+;-------------------------------------------------------------------------------
+; Input from Port
+;-------------------------------------------------------------------------------
+        LD   C,E                        ; Get Port address in E
+        IN   A,(C)                      ; Input data from that port
+        JR   L02DA                      ; Move C to the display plus "_ _ _ _"
+;-------------------------------------------------------------------------------
+; Output to Port
+;-------------------------------------------------------------------------------
+        LD   C,D                        ; Get Port address in D
+        OUT  (C),E                      ; Output E data to port D
+        LD   A,E                        ; Get that data into accum
+L02DA:
+        PUSH AF                         ; Save the accumulator
+        CALL L030E                      ; Move C to the display
+        LD   B,$04                      ; Send 4 "----" to the display
+L02E0:
+        LD   A,$40                      ; Send a "-" to the display
+        OUT  ($78),A                    ; Output it direct
+        DJNZ L02E0                      ; And continue until all 4 done
+        POP  AF                         ; Retrieve value of A
+        JP   L030F                      ; And output it to display
+;-------------------------------------------------------------------------------
+; Gets 4 values 0-F Hex into HL
+;-------------------------------------------------------------------------------
+L02EA:
+        RST  $18                        ; Wait for a key
+        CP   $2E                        ; Is it a function key?
+        JR   Z,L0301                    ; CLS and prompt
+        CP   $10                        ; Is it a value key?
+        RET  NC                         ; Nope, get out
+
+        PUSH HL                         ; Save contents of HL
+        EX   DE,HL                      ; Put DE in its place
+        ADD  HL,HL                      ; Rotate it left
+        ADD  HL,HL                      ; Again
+        ADD  HL,HL                      ; Again
+        ADD  HL,HL                      ; And again
+        ADD  A,L                        ; Add the new key value into L
+        LD   L,A                        ; Store it back to L
+        EX   DE,HL                      ; Place the new value back into DE
+        POP  HL                         ; Retrieve old HL
+L02FC:
+        CALL L0329                      ; Get another 4 "_ _ _ _" to display
+        JR   L02EA                      ; Get another value into A
+;-------------------------------------------------------------------------------
+L0301:
+        CALL L0352                      ; Clear the display
+        LD   DE,$0000                   ; Clear DE
+        JR   L02FC                      ; Send 4 "_ _ _ _" to display
+L0309:
+        LD   D,$00
+        LD   E,A
+        JR   L02FC                      ; Send 4 "_ _ _ _" to display
+L030E:
+        LD   A,C
+L030F:
+        CALL L036E                      ; Convert upper half of A to hex in disp
+        RLCA                            ; Rotate lower nybble to upper half
+        RLCA 
+        RLCA 
+        RLCA 
+        JP   L036E                      ; Convert lower half of A to hex in disp
+;-------------------------------------------------------------------------------
+; SEND CONTENTS OF HL TO DISPLAY
+;-------------------------------------------------------------------------------
+L0319:
+        CALL L0322                      ; Send contents of HL to display
+        CALL L033B                      ; Send two underlines "_ _" to display
+;-------------------------------------------------------------------------------
+        LD   A,(HL)                     ; Memory contents at (HL) to display
+        JR   L030F                      ; Convert A to display
+;-------------------------------------------------------------------------------
+L0322:
+        LD   A,H                        ; Send contents of H to display
+        CALL L030F                      ; Send A to display
+;-------------------------------------------------------------------------------
+        LD   A,L                        ; Send contents of L to display
+        JR   L030F                      ; Convert A and send it to display
+;-------------------------------------------------------------------------------
+; Send 4 "_ _ _ _" to display
+;-------------------------------------------------------------------------------
+L0329:
+        LD   B,$04                      ; Get 4 in counter
+L032B:
+        LD   A,$20                      ; Get character for "_" in Accum
+        OUT  ($78),A                    ; Output it
+        DJNZ L032B                      ; and continue until B=0
+;-------------------------------------------------------------------------------
+L0331:
+        LD   A,D                        ; Send contents of D to display
+        CALL L030F                      ; Display A
+;-------------------------------------------------------------------------------
+        LD   A,E                        ; Send contents of E to display
+        JR   L030F                      ; Display A
+        CALL L033B                      ; Print four "_ _ _ _" to display entry
+L033B:
+        CALL L033E                      ; Print two "_ _" to display entry
+L033E:
+        LD   A,$08                      ; Print a "_" to display
+        OUT  ($78),A                    ; Output the "_"
+        RET  
+L0343:
+        CALL L06C6                      ; ???
+
+;-------------------------------------------------------------------------------
+; Intialize the 8279 Keyboard / Display Controller IC
+;-------------------------------------------------------------------------------
+        LD   A,$00                      ; 8 each 8-bit chars  - chars start Left
+        OUT  ($79),A                    ; Encoded 8x8 matrix keypad
+        LD   A,$3F                      ; Set prescaler clock at 64kHz
+        OUT  ($79),A
+        LD   A,$C2                      ; Clears only the FIFO status
+        OUT  ($79),A
+L0352:
+        LD   A,$D0                      ; Sets the display to all zero bits on clr
+        OUT  ($79),A
+L0356:
+        IN   A,($79)                    ; Get the status word
+        RLCA                            ; Rotate "display unavailable" bit into CY
+        JR   C,L0356                    ; and repeat until display becomes avail
+        RET  
+;-------------------------------------------------------------------------------
+; Text for 8279 display
+;-------------------------------------------------------------------------------
+
+	.DB $08        				         ; 8 characters following
+	.DB $9E,$CB,$C2,$C2,$D7,$08,$08,$08
+;         H   E   L   L   O   -   -   -
+
+	.DB $08					             ; 8 characters following
+	.DB $CB,$88,$D8,$88,$88,$08,$08,$08
+;         E   R   O   R   R   -   -   -
+; This is funny, even "Error" is spelled wrong in memory...
+
+;-------------------------------------------------------------------------------
+; Generates the LED segments to turn on for the numbers 0 - F for UPPER nybble
+; Creates a base address at $0384, Rotates upper nybble of A to lower
+; Masks and adds $84 to it and creates the base address from which to retrieve
+; the character, then outputs the new char to the 8279 display, restores AF,HL
+;-------------------------------------------------------------------------------
+L036E:
+        PUSH AF                         ; Save current A and flags
+        PUSH HL                         ; Save current HL values
+        LD   H,$03                      ; Set base address for $03xx
+        RRCA 
+        RRCA 
+        RRCA 
+        RRCA                            ; Rotate upper nybble to lower
+        AND  $0F                        ; Strip off upper nybble
+        ADD  A,$84                      ; Sets up base address at $0384
+        JR   NC,L037D                   ; No need to add H to the table
+        INC  H                          ; Increment the high pointer
+L037D:
+        LD   L,A                        ; Load the new value to L
+        LD   A,(HL)                     ; Get the byte at this pointer
+        OUT  ($78),A                    ; Output it to the display
+        POP  HL                         ; Retrieve the previous HL value
+        POP  AF                         ; Get the previous A and Flags
+        RET                             ; and return from whence we came
+;-------------------------------------------------------------------------------
+; This is the table for the 8279 to load display data from (routine @ $036E)
+	.DB $D7,$14,$CD,$5D,$1E,$5B,$DB,$15,$DF,$1F,$9F,$DA,$C3,$DC,$CB,$8B
+
+;0384 1101 0111 (0)
+;0385 0001 0100 (1)
+;0386 1100 1101 (2)
+;0387 0101 1101 (3)
+;0388 0001 1110 (4)
+;0389 0101 1011 (5)
+;038A 1101 1011 (6)
+;038B 0001 0101 (7)
+;038C 1101 1111 (8)
+;038D 0001 1111 (9)
+;038E 1001 1111 (A)
+;038F 1101 1010 (B)
+;0390 1100 0011 (C)
+;0391 1101 1100 (D)
+;0392 1100 1011 (E)
+;0393 1000 1011 (F)
+;-------------------------------------------------------------------------------
+; HOW THE LED SEGMENTS ARE BIT-ORGANIZED TO THE 8279
+;-------------------------------------------------------------------------------
+;   -D0-
+; D1    D2
+;   -D3-
+; D7    D4
+;   -D6-   D5 (DP)
+;-------------------------------------------------------------------------------
+; After the LED data, wasted space until $0400
+;-------------------------------------------------------------------------------
+        .DB                 $FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF
+        .DB $FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF
+        .DB $FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF
+        .DB $FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF
+        .DB $FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF
+        .DB $FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF
+        .DB $FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF
+;-------------------------------------------------------------------------------
+; This ends the monitor rom, $0400 begins the PROM BURNER routines
+;-------------------------------------------------------------------------------
+        LD   HL,$3000                   ; Source is start of static ram
+        LD   BC,$33FF                   ; End of static ram
+        LD   DE,$0000
+        LD   A,$00
+        JR   L0432                      ; Burn prom
+;-------------------------------------------------------------------------------
+        LD   HL,$2000                   ; Rom 3 is source
+        LD   BC,$27FF                   ; 2K ($2000-$27FF)
+        LD   DE,$0000
+        LD   A,$01
+        JR   L0432                      ; Burn prom
+;-------------------------------------------------------------------------------
+        LD   HL,$1800                   ; Starts halfway thru Rom2
+        LD   BC,$27FF                   ; 4k
+        LD   DE,$0000
+        LD   A,$02
+        JR   L0432                      ; Burn prom
+;-------------------------------------------------------------------------------
+        LD   HL,$4000                   ; Start of memory space (vacant)
+        LD   BC,$5FFF                   ; 
+        LD   DE,$0000
+        LD   A,$03
+;-------------------------------------------------------------------------------
+L0432:
+        LD   ($3FF2),A                  ; Store Rom type
+        LD   ($3FF4),HL                 ; Start of data
+        LD   ($3FF6),BC                 ; End of data
+        LD   ($3FF8),DE                 ; Counter
+        LD   A,($3FF2)
+        LD   HL,$2708                   ; Rom Type 2708 (1K x 8)
+        LD   IX,$0528                   ; Set address of appropriate pin outs
+        CP   $01                        ; Check if this is the correct ROM type
+        JR   C,L046C                    ; Continue forward
+
+        LD   HL,$2716                   ; Rom Type 2716 (2K x 8)
+        LD   IX,$0533                   ; Set address of appropriate pin outs
+        JR   Z,L046C                    ; Continue forward
+
+        LD   HL,$2732                   ; Rom Type 2732 (4K x 8)
+        LD   IX,$053E                   ; Set address of appropriate pin outs
+        CP   $03                        ; Make sure this is the correct Rom type
+        JR   C,L046C                    ; Continue forward
+
+        LD   HL,$2764                   ; Rom Type 2764 (8K x 8)
+        LD   IX,$0549                   ; Set address of appropriate pin outs
+        JP   NZ,L006D                   ; Else Error out if Rom Type not 1,2,3
+
+L046C:
+        LD   B,$03                      ; Print four "PPPP" to the display
+L046E:
+        LD   A,$8F                      ; The letter "P"
+        OUT  ($78),A                    ; Output it to the display
+        DJNZ L046E                      ; Loop it until done
+        CALL L033E                      ; Print a "_"
+        CALL L0322                      ; Send contents of HL to display
+        RST  $18                        ; Get a character
+        CP   $14                        ; "OK"?
+        JP   NZ,L006D                   ; Wrong answer, Error out
+        CALL L04B3                      ; Set up pinout routines for particular rom
+L0483:
+        PUSH AF                         ; Save the key
+        CALL L0296                      ; Generate the byte count and start address
+L0487:
+        CALL L04F1                      ; Latch the current address to burner
+        LD   A,(HL)                     ; Get the data at source
+        CALL L0514                      ; Write this to the data latch
+        CALL L04B3                      ; Burn this byte to the ROM
+        INC  HL
+        INC  DE
+        DEC  BC
+        LD   A,B
+        OR   C
+        JR   NZ,L0487                   ; (-$11)
+        POP  AF
+        DEC  A
+        JR   NZ,L0483                   ; (-$19)
+        CALL L0296
+        CALL L0533                      ; 2716 ROM
+L04A2:
+        CALL L04F1
+        CALL L0554
+        CP   (HL)
+        JR   NZ,L04E6                   ; (+$3b)
+        INC  HL
+        INC  DE
+        DEC  BC
+        LD   A,B
+        OR   C
+        JR   NZ,L04A2                   ; (-$10)
+        RET  
+;-------------------------------------------------------------------------------
+L04B3:
+        JP   (IX)                       ; Burn this byte to the ROM
+        CALL L0296
+        CALL L0533
+        EX   DE,HL
+L04BC:
+        CALL L04F1
+        CALL L0554
+        LD   (HL),A
+        INC  HL                         ; Increment pointer
+        INC  DE                         ; Increment ?
+        DEC  BC                         ; Decrement byte counter
+        LD   A,B                        ; Check if BC=0
+        OR   C                          ; 
+        JR   NZ,L04BC                   ; Loop until done
+        RET  
+;-------------------------------------------------------------------------------
+        CALL L0533
+L04CE:
+        CALL L04F1
+        CALL L0554
+        CALL L04E6
+        INC  DE                         ; Next location on ROM
+        RST  $18                        ; Get a character
+        CP   $13
+        JR   Z,L04CE                    ;
+        CP   $2B
+        JP   NZ,L007C
+        DEC  DE
+        DEC  DE
+        JR   L04CE                      ;
+L04E6:
+        PUSH AF                         ; Save A
+        CALL L0331                      ; Send contents of DE to display
+        CALL L033B                      ; Print two "_ _" to display
+        POP  AF                         ; Retrieve A
+        JP   L030F                      ; Convert register A to 8279 Display
+L04F1:
+        PUSH BC
+        CALL L0329                      ; Print 4 "_ _ _ _" to display
+        POP  BC
+        LD   A,$10                      ; 0001 0000 Binary
+        OUT  ($62),A
+        LD   A,D                        ; High order address to ROM
+        OUT  ($61),A                    ; Set it to address latch
+        LD   A,$18                      ; 0001 1000 Binary
+        OUT  ($62),A                    ; D3 clocks it to HIGH ADRRESS
+        LD   A,$10                      ; 0001 0000 Binary
+        OUT  ($62),A
+        LD   A,E                        ; Low order address to ROM
+        OUT  ($61),A                    ; Set it to address latch
+        LD   A,$12                      ; 0001 0010 Binary
+        OUT  ($62),A                    ; D1 clocks it to LOW ADDRESS
+        LD   A,$10                      ; 0001 0000 Binary
+        OUT  ($62),A                    ; Clear the control latch
+        SUB  A                          ; 0000 0000 Binary
+        OUT  ($62),A                    ; Probably turns off programming voltage
+        RET                             ; +21 volts to PGM pin of ROM
+;-------------------------------------------------------------------------------
+L0514:
+        OUT  ($61),A                    ; Writes A to the address latch
+        RET  
+;-------------------------------------------------------------------------------
+; Performs a time delay, total run is 0.0403685 Seconds from entry, give or take
+;-------------------------------------------------------------------------------
+L0517:
+        PUSH HL                         ; 6.5uSecs
+        LD   HL,$0F02                   ; 5.0uSecs
+L051B:
+        DEC  HL                         ; 3.0uSecs
+        LD   A,H                        ; 2.0uSecs
+        OR   L                          ; 2.0uSecs
+        JR   NZ,L051B                   ; 3.5uSec until met, 6.0uSec when met
+        POP  HL                         ; 5.0uSecs
+        RET                             ; 5.0uSecs
+;-------------------------------------------------------------------------------
+L0522:
+        PUSH HL                         ; Save HL
+        LD   HL,$0039                   ; Delay for 0.0005985 Seconds
+        JR   L051B                      ; Run the Time delay
+;-------------------------------------------------------------------------------
+; 2708 ROM 1K x 8
+;-------------------------------------------------------------------------------
+        LD   A,$90                      ; 1001 0000 Binary
+        OUT  ($63),A                    ; Port A=Input, B=Output, C=Output
+        LD   IX,$056D                   ; Address for continued routine
+        LD   A,$58
+        RET  
+;-------------------------------------------------------------------------------
+; 2716 ROM 2K x 8
+;-------------------------------------------------------------------------------
+L0533:
+        LD   A,$90                      ; 1001 0000 Binary
+        OUT  ($63),A                    ; Port A=Input, B=Output, C=Output
+        LD   IX,$058D                   ; Address for continued routine
+        LD   A,$01
+        RET  
+;-------------------------------------------------------------------------------
+; 2732 ROM 4K x 8
+;-------------------------------------------------------------------------------
+        LD   A,$90                      ; 1001 0000 Binary
+        OUT  ($63),A                    ; Port A=Input, B=Output, C=Output
+        LD   IX,$05B4                   ; Address for continued routine
+        LD   A,$01
+        RET  
+;-------------------------------------------------------------------------------
+; 2764 ROM 8K x 8
+;-------------------------------------------------------------------------------
+        LD   A,$90                      ; 1001 0000 Binary
+        OUT  ($63),A                    ; Port A=Input, B=Output, C=Output
+        LD   IX,$05D4                   ; Address for continued routine
+        LD   A,$01
+        RET  
+;-------------------------------------------------------------------------------
+
+;-------------------------------------------------------------------------------
+L0554:
+        LD   A,$92                      ; 8255 Mode Word
+        OUT  ($63),A                    ; Port A=Input, *B=Input*, C=Output
+        LD   A,$11                      ; 0001 0001 Binary
+        OUT  ($62),A                    ; Set Port C latch to Address LOW
+        LD   A,$51                      ; 0101 0001 Binary
+        OUT  ($62),A                    ; Set Port C latch
+        LD   A,$71                      ; 0111 0001 Binary
+        OUT  ($62),A                    ; Set Port C latch
+        IN   A,($61)                    ; Input Port B (verify?)
+        PUSH AF                         ; Save it
+        LD   A,$90                      ; 8255 Mode Word
+        OUT  ($63),A                    ; Port A=Input, *B=Output*, C=Output
+        POP  AF                         ; Retrieve verified value
+        RET  
+;-------------------------------------------------------------------------------
+; 2708 ROM 1K x 8
+;-------------------------------------------------------------------------------
+        LD   A,$10                      ; 0001 0000 B
+        OUT  ($62),A                    ; Port C
+        LD   A,$14                      ; 0001 0100 B
+        OUT  ($62),A                    ; Port C
+        PUSH HL                         ; Delay a few mic's
+        POP  HL
+        LD   A,$94                      ; 1001 0100 B
+        OUT  ($62),A                    ; Port C
+        CALL L0522                      ; Run a 0.5mSec delay
+        LD   A,$54                      ; 0101 0100 B
+        OUT  ($62),A                    ; Port C
+        NOP                             ; Wait
+        LD   A,$10                      ; 0001 0000 B
+        OUT  ($62),A                    ; Port C
+        PUSH HL                         ; Delay a few mic's
+        POP  HL
+        SUB  A                          ; 0000 0000 B
+        OUT  ($62),A                    ; Port C
+        RET  
+;-------------------------------------------------------------------------------
+; 2716 ROM 2K x 8
+;-------------------------------------------------------------------------------
+        LD   A,$10
+        OUT  ($62),A
+        LD   A,$90
+        OUT  ($62),A
+        NOP  
+        LD   A,$D0
+        OUT  ($62),A
+        NOP  
+        LD   A,$90
+        OUT  ($62),A
+        CALL L0517
+        LD   A,$D0
+        OUT  ($62),A
+        LD   A,$50
+        OUT  ($62),A
+        PUSH HL
+        POP  HL
+        LD   A,$10
+        OUT  ($62),A
+        SUB  A
+        OUT  ($62),A
+        RET  
+;-------------------------------------------------------------------------------
+; 2732 ROM 4K x 8
+;-------------------------------------------------------------------------------
+        LD   A,$10
+        OUT  ($62),A
+        LD   A,$90
+        OUT  ($62),A
+        PUSH HL
+        POP  HL
+        LD   A,$D0
+        OUT  ($62),A
+        CALL L0517
+        LD   A,$90
+        OUT  ($62),A
+        NOP  
+        LD   A,$10
+        OUT  ($62),A
+        PUSH HL
+        POP  HL
+        SUB  A
+        OUT  ($62),A
+        RET  
+;-------------------------------------------------------------------------------
+; 2764 ROM 8K x 8
+;-------------------------------------------------------------------------------
+        LD   A,$10
+        OUT  ($62),A
+        LD   A,$90
+        OUT  ($62),A
+        LD   A,$D0
+        OUT  ($62),A
+        PUSH HL
+        POP  HL
+        LD   A,$D4
+        OUT  ($62),A
+        CALL L0517
+        LD   A,$D0
+        OUT  ($62),A
+        LD   A,$90
+        OUT  ($62),A
+        NOP  
+        LD   A,$10
+        OUT  ($62),A
+        PUSH HL
+        POP  HL
+        SUB  A
+        OUT  ($62),A
+        RET  
+;-------------------------------------------------------------------------------
+; This is an option off the menu
+;-------------------------------------------------------------------------------
+        CALL L0617                      ; Multiply HL=DE * 1024
+        CALL L0533
+        LD   DE,$0000
+L0605:
+        CALL L04F1
+        CALL L0554
+        CP   $FF
+        JP   NZ,L04E6
+        INC  DE                         ; Next location
+        DEC  HL                         ; Decrement counter
+        LD   A,H                        ; Check to see if HL=0 yet
+        OR   L
+        JR   NZ,L0605                   ; Loop thru until zero
+        RET                             ; and then return
+;-------------------------------------------------------------------------------
+; Performs HL = DE * $0400 (1024 decimal)
+;-------------------------------------------------------------------------------
+L0617:
+        LD   HL,$0000                   ; Clear HL initially, results here
+        LD   BC,$0400                   ; Adds in $0400 each iteration of DE
+L061D:
+        ADD  HL,BC                      ; Perform the add
+        CALL L0626                      ; Decrement DE and converts DE to BCD
+        LD   A,D                        ; Check for DE=0
+        OR   E                          ; With OR function
+        JR   NZ,L061D                   ; Continue adding $0400 to HL until DE=0
+        RET  
+;-------------------------------------------------------------------------------
+; Decrements DE and converts to BCD and stores conversion back to DE
+;-------------------------------------------------------------------------------
+L0626:
+        LD   A,E                        ; DECREMENT E
+        SUB  $01
+        DAA                             ; DECIMAL ADJUST TO BCD
+        LD   E,A                        ; SAVE IT BACK
+        RET  NC                         ; IF THAT'S ALL THERE IS, THEN DONE
+
+        LD   A,D                        ; ELSE IF BORROW FROM LOWER NYBBLE
+        SUB  $01                        ; THEN ALSO DECREMENT THE D
+        DAA                             ; REGISTER AND DECIMAL ADJUST IT AS WELL
+        LD   D,A                        ; STORE IT BACK
+        RET                             ; AND NOW WE'RE FINALLY DONE
+;-------------------------------------------------------------------------------
+; Load an Intel Hex file via the SIO
+;-------------------------------------------------------------------------------
+        LD   IX,$0000                   ; 
+        JR   L0640                      ; Start the Load
+;-------------------------------------------------------------------------------
+; This entry point allows an offset to be added to the target location of load
+;-------------------------------------------------------------------------------
+        CALL L02A3                      ; Retrieve DE and HL, clear flags
+        SBC  HL,DE                      ; Generate the byte count in HL
+        PUSH HL                         ; Save to stack
+        POP  IX                         ; And retrieve this count into IX
+L0640:
+        CALL L0730                      ; Print a CRLF to SIO
+L0643:
+        CALL L0686                      ; Loop a character thru the SIO, test
+        JP   C,L006D                    ; Error out
+        CP   $3A                        ; Is the character a colon ":" ?
+        JP   NZ,L006D                   ; Nope, Error out
+        LD   E,$00                      ; Start the check sum
+        CALL L0694                      ; Get the Record Length Field
+        LD   D,A                        ; Move it into D
+        CALL L0694                      ; Get the address high order
+        LD   H,A                        ; Move it into H
+        CALL L0694                      ; Get the address low order
+        LD   L,A                        ; Move it into L
+        PUSH IX                         ; Save the counter
+        POP  BC                         ; And bring it back in BC
+        ADD  HL,BC                      ; Add this to HL
+        CALL L0694                      ; Get next two characters
+        CP   $01                        ; Is it record type $01 (EOF)?
+        JR   NZ,L0670                   ; No, keep gathering data
+        CALL L0694                      ; Get next characters
+        LD   A,E                        ; Check the checksum
+        AND  A                          ; It should be zero
+        RET  Z                          ; If ok, else...
+        JP   L006D                      ; Error back to monitor
+;-------------------------------------------------------------------------------
+L0670:
+        LD   A,D                        ; CHECK D FOR ZERO
+        AND  A                          ; SET FLAGS
+        JR   Z,L067C                    ; IF ZERO, JUMP AHEAD
+
+        CALL L0694                      ; ELSE GET TWO MORE CHARACTERS
+        LD   (HL),A                     ; SAVE IT TO MEMORY
+        INC  HL                         ; INCREMENT MEMORY POINTER
+        DEC  D                          ; DECREMENT THE COUNTER
+        JR   L0670                      ; AND CONTINUE UNTIL WE ARE DONE
+;-------------------------------------------------------------------------------
+L067C:
+        CALL L0694                      ; GET NEXT TWO CHARS FROM SIO INTO A
+        LD   A,E                        ; CHECK THE CHECKSUM
+        AND  A                          ; IT SHOULD BE ZERO IF EVERYTHING'S GO
+        JR   Z,L0643                    ; GET THE NEXT CHARACTER
+        JP   L006D                      ; Error back to monitor
+L0686:
+        CALL L0710                      ; Loop a character thru the SIO
+        CP   $03                        ; Is it <break>?
+        JR   Z,L0692                    ; Set the CY flag and return
+        CP   $20                        ; Is is <space>?
+        JR   C,L0686                    ; Ignore and get next character
+        RET  
+;-------------------------------------------------------------------------------
+L0692:
+        SCF                             ; Indicates a Break was entered
+        RET  
+;-------------------------------------------------------------------------------
+; Gets two characters forms a Hex value in A
+;-------------------------------------------------------------------------------
+L0694:
+        CALL L0686                      ; Loop a character thru the SIO
+        JR   C,L06A9                    ; Error out
+        LD   B,A                        ; Load top into B
+        CALL L0686                      ; Get next character
+        JR   C,L06A9                    ; Error out
+        LD   C,A                        ; Load bot into C
+        CALL L06AD                      ; Convert BC into a byte in A
+        LD   C,A                        ; Load the byte into C
+        LD   A,E                        ; Form the checksum
+        SUB  C
+        LD   E,A                        ; Store the checksum back
+        LD   A,C                        ; Retrieve the byte value
+        RET  
+;-------------------------------------------------------------------------------
+L06A9:
+        POP  BC
+        JP   L006D                      ; Error
+;-------------------------------------------------------------------------------
+; Converts ASCII characters in BC (which are "0" thru "F") into a byte in reg A
+;-------------------------------------------------------------------------------
+L06AD:
+        LD   A,B                        ; Load High order nybble into A
+        SUB  $30                        ; Reduce to absolute value
+        CP   $0A                        ; If > 9 must be A-F
+        JR   C,L06B6                    ; Else skip ahead
+        SUB  $07                        ; Adjust A-F down to absolute value
+L06B6:
+        RLCA                            ; Move it to upper nybble of A
+        RLCA 
+        RLCA 
+        RLCA 
+        LD   B,A                        ; Temporarily store it to B
+        LD   A,C                        ; Get lower nybble
+        SUB  $30                        ; Reduce to absolute value
+        CP   $0A                        ; If > 9 must be A-F
+        JR   C,L06C4                    ; Else just skip ahead
+        SUB  $07                        ; Adjust A-F down to absolute
+L06C4:
+        ADD  A,B                        ; Add in the upper nybble
+        RET  
+;-------------------------------------------------------------------------------
+;-------------------------------------------------------------------------------
+; Sets up the 8253 PIT for generating baud rates for the SIO
+;-------------------------------------------------------------------------------
+L06C6:
+        LD   E,$02                      ; Load up the PIT 8253 clock generator 2
+        LD   HL,$0470                   ; Generates 110 Baud (1,760 Hz)
+        CALL L06FB                      ; Write this to counter 2
+        LD   E,$01                      ; Load up data for counter 1
+        LD   HL,$01A1                   ; Generates 300 Baud (4796 Hz)
+        CALL L06FB                      ; Write this to counter 1
+        LD   E,$00                      ; Counter 0
+        LD   HL,$001A                   ; Generates 4800 Baud (76,923 Hz)
+        CALL L06FB                      ; Start the PIT to generate baud rates
+        LD   HL,$06EE                   ; Get the SIO data
+        LD   C,$76                      ; Set the SIO base port address
+        LD   B,$0A                      ; and the counter for the data
+        OUTI                            ; Output and wait
+        NOP                             ; Wait 2uSec
+        OUTI                            ; Output and wait
+        NOP                             ; Wait 2uSec
+        OTIR                            ; Finish the rest of the data
+        RET  
+;-------------------------------------------------------------------------------
+; DATA FOR SIO CHIP
+;-------------------------------------------------------------------------------
+		.DB $18,$18,$04,$44,$05,$EA,$03,$C1,$01,$00
+;-------------------------------------------------------------------------------
+; Allows the user to set the PIT channel number and divisor
+;  since this IC generates the baud rates, use with caution you may kill your
+;  connection to the terminal
+;-------------------------------------------------------------------------------
+        CALL    $02A3		; Get xxxx into DE, yyyy into HL
+L06FB:
+        SUB  A                          ; Clear A
+        CP   E                          ; E contains PIT number
+        LD   A,$36                      ; Data for PIT control
+        LD   C,$6C                      ; PIT Counter 0 port address
+        LD   B,E                        ; Pit # to B
+        JR   Z,L0709                    ; Finalize PIT data to counter
+L0704:
+        ADD  A,$40                      ; Increment counter number
+        INC  C                          ; Increment port address
+        DJNZ L0704                      ; Until all 3 counters are programmed
+L0709:
+        OUT  ($6F),A                    ; Command word (mode)
+        OUT  (C),L                      ; Low byte of counter
+        OUT  (C),H                      ; Hi  byte of counter
+        RET                             ; and done
+;-------------------------------------------------------------------------------
+; Loop a character thru the SIO, receive and echo it back to the terminal
+;-------------------------------------------------------------------------------
+L0710:
+        CALL L071D                      ; Receive a character from the SIO
+L0713:
+        PUSH AF                         ; Save the character
+L0714:
+        CALL L0727                      ; Check the status
+        JR   Z,L0714                    ; Loop until TX buffer is empty
+        POP  AF                         ; Get the character back
+        OUT  ($74),A                    ; And transmit it out
+        RET  
+;-------------------------------------------------------------------------------
+; Receive a character from the SIO
+;-------------------------------------------------------------------------------
+L071D:
+        CALL L0727                      ; Check the SIO status
+        JR   NC,L071D                   ; and Loop until a byte is received
+        IN   A,($74)                    ; Get the byte
+        AND  $7F                        ; Strip off the D7 bit
+        RET  
+;-------------------------------------------------------------------------------
+; Check the SIO status
+;-------------------------------------------------------------------------------
+L0727:
+        SUB  A                          ; Select Register 0
+        OUT  ($76),A                    ; Send to SIO
+        IN   A,($76)                    ; Get status word
+        RRCA                            ; Rotate RX status ready into CY flag
+        BIT  1,A                        ; Test D1 for TX buffer empty (Z flag)
+        RET  
+;-------------------------------------------------------------------------------
+; New line - sends a CR LF to the terminal to start a new line
+;-------------------------------------------------------------------------------
+L0730:
+        LD   BC,$0D0A                   ; Load up a Carriage Return & Line Feed
+        LD   A,B                        ; Send the CR first
+        CALL L0713                      ; Xmit it
+        LD   A,C                        ; Get the LF
+        CALL L0713                      ; Xmit it
+        RET  
+;-------------------------------------------------------------------------------
+; LAST PORTION OF ROM IS BLANK
+;-------------------------------------------------------------------------------
+;        0A   0D,78                      CD
+;        FF   FF,FF                      FF
+;        FF   FF,FF                      FF
+;        FF   FF,FF                      FF
+;        FF   FF,FF                      FF
+;        FF   FF,FF                      FF
+;        FF   FF,FF                      FF
+;        FF   FF,FF                      FF
+;        FF   FF,FF                      FF
+;        FF   FF,FF                      FF
+;        FF   FF,FF                      FF
+;        FF   FF,FF                      FF
+;        FF   FF,FF                      FF
+;-------------------------------------------------------------------------------
+; END OF ROM
+;-------------------------------------------------------------------------------
