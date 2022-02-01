@@ -1,4 +1,13 @@
 ;-------------------------------------------------------------------------------
+; Converted Jowel Ownes' listeding file to an assembly file.
+; Rick Dodd - January 2022.
+;
+;  To assemble: 
+;    ../../tools/zmac -c -o ./8279OpSystem.hex -o ../../tools/zout/8279OpSystem.lst 8279OpSystem.a80
+;  To send to ROM emulator: 
+;    py ../../tools/EPROM_NG_v2.0rc3.py -mem 2716 -spi y -auto y ./8279OpSystem.hex com8
+;
+;-------------------------------------------------------------------------------
 ; Disassembly of the file "8279.bin"
 ; Commented Dec 17th, 2004 Joel Owens
 ; Space-Time Productions 8279 Operating Monitor Rom
