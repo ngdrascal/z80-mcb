@@ -15,6 +15,9 @@
 ; 8279-BASED OPERATING SYSTEM, MONITOR AND EPROM PROGRAMMER
 ;  See keypad photo on site www.joelowens.org
 ;
+SIO_DATA    .EQU $75
+SIO_CMD     .EQU $77
+
 ;-------------------------------------------------------------------------------
 ; RST 00
 ;-------------------------------------------------------------------------------
@@ -1236,7 +1239,7 @@ L06C6:
         LD   HL,$001A                   ; Generates 4800 Baud (76,923 Hz)
         CALL L06FB                      ; Start the PIT to generate baud rates
         LD   HL,$06EE                   ; Get the SIO data
-        LD   C,$76                      ; Set the SIO base port address
+        LD   C,SIO_CMD                  ; Set the SIO base port address
         LD   B,$0A                      ; and the counter for the data
         OUTI                            ; Output and wait
         NOP                             ; Wait 2uSec
@@ -1281,7 +1284,7 @@ L0714:
         CALL L0727                      ; Check the status
         JR   Z,L0714                    ; Loop until TX buffer is empty
         POP  AF                         ; Get the character back
-        OUT  ($74),A                    ; And transmit it out
+        OUT  (SIO_DATA),A                ; And transmit it out
         RET  
 ;-------------------------------------------------------------------------------
 ; Receive a character from the SIO
@@ -1289,7 +1292,7 @@ L0714:
 L071D:
         CALL L0727                      ; Check the SIO status
         JR   NC,L071D                   ; and Loop until a byte is received
-        IN   A,($74)                    ; Get the byte
+        IN   A,(SIO_DATA)               ; Get the byte
         AND  $7F                        ; Strip off the D7 bit
         RET  
 ;-------------------------------------------------------------------------------
@@ -1297,8 +1300,8 @@ L071D:
 ;-------------------------------------------------------------------------------
 L0727:
         SUB  A                          ; Select Register 0
-        OUT  ($76),A                    ; Send to SIO
-        IN   A,($76)                    ; Get status word
+        OUT  (SIO_CMD),A                ; Send to SIO
+        IN   A,(SIO_CMD)                ; Get status word
         RRCA                            ; Rotate RX status ready into CY flag
         BIT  1,A                        ; Test D1 for TX buffer empty (Z flag)
         RET  
