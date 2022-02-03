@@ -1,3 +1,14 @@
+;*************************************************************
+; Modified to support Space-Time Production's Master Control Board.
+; Rick Dodd - January 2022
+;
+; To assemble using the zmac assembler
+;   ../../tools/zmac -c -o ./TinyBasic.hex -o ../../tools/zout/TinyBasic.lst TinyBasic.a80
+;
+; To transfer to the ROM emulator
+;   py ../../tools/EPROM_NG_v2.0rc3.py -mem 2716 -spi y -auto y ./TinyBasic.hex com8
+;
+;*************************************************************
 ;Modified Nov 1 2016 by Donn Stewart for use in CPUville Z80 computer
 ;Changed UART (ACIA) port numbers to 3 for status, 2 for data in INIT, CHKIO, OUTC
 ;Status bit for read in CHKIO changed to 0x02

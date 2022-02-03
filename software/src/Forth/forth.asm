@@ -1,3 +1,7 @@
+;  To assemble: ../../tools/zmac -c -o ./forth.hex -o ../../tools/zout/forth.lst forth.asm
+;  To send to ROM emulator: py ../../tools/EPROM_NG_v2.0rc3.py -mem 2716 -spi y -auto y ./forth.hex com8
+
+
 ;-------------------------------------------------------------------------------
 ; Save to Space-Time Productions Z-80 directory on
 ;  February 22, 2007  and converted terms for TASM
