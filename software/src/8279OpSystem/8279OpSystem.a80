@@ -18,6 +18,16 @@
 SIO_DATA    .EQU $75
 SIO_CMD     .EQU $77
 
+PIT_CMD     .EQU $6F
+
+I8279_CMD   .EQU $79
+I8279_DATA  .EQU $78
+
+I8255_1A_DATA .EQU $60
+I8255_1B_DATA .EQU $61
+I8255_1C_DATA .EQU $62
+I8255_1_CMD   .EQU $63
+
 ;-------------------------------------------------------------------------------
 ; RST 00
 ;-------------------------------------------------------------------------------
@@ -29,11 +39,10 @@ L0005:
 ;-------------------------------------------------------------------------------
 ; RST 08 - Get a key from the 8279 IC
 ;-------------------------------------------------------------------------------
-        IN   A,($79)                    ; Retrieve the status word
+        IN   A,(I8279_CMD)              ; Retrieve the status word
         AND  $07                        ; Strip off all but # keys in buffer
         RET  Z                          ; Return if nothing ready
-
-        IN   A,($78)                    ; Get the pressed key
+        IN   A,(I8279_DATA)             ; Get the pressed key
         RET                             ; And go back
 ;-------------------------------------------------------------------------------
 ; RST 10 - Filter the input rows, final output is S S S R R (scan #, return #)
@@ -66,13 +75,18 @@ L0023:
         JR   L0023                      ; This is an endless loop right here
 ;-------------------------------------------------------------------------------
 ; Prints (DE) characters to 8279 display, starting at (DE+01)
+; INPUTS:
+;  Reg DE - point to the first of a string, which is its length
 ;-------------------------------------------------------------------------------
-L0025:
+PRNTSTR:
         LD   A,(DE)                     ; Get byte count
         INC  DE                         ; Point to first character
         LD   B,A                        ; Save the byte count
 ;-------------------------------------------------------------------------------
 ; RST 28 - PRINT CHARACTERS AT (DE) TO 8279 DISPLAY
+; INPUTS:
+;   Reg B  - length of string to print
+;   Reg DE - points to first character
 ;-------------------------------------------------------------------------------
 L0028:
         LD   A,(DE)                     ; Get the character
@@ -105,8 +119,8 @@ L0038:
         PUSH BC
         PUSH DE
         PUSH HL
-        CALL L0343
-        JP   L0068
+        CALL L0343                      ; Init the 8253 and the 8279
+        JP   L0068                      ; Print Hello message
         LD   HL,$0017
         ADD  HL,SP
         LD   (HL),D                     ; Store user stack value to HL
@@ -132,15 +146,15 @@ L0038:
         JR   L0038                      ; Process NMI the same as an INT Mode 1
 ;-------------------------------------------------------------------------------
 L0068:
-        LD   HL,$035C                   ; Address for "HELLO" message
+        LD   HL,HELLOMSG                ; Address for "HELLO" message
         JR   L0071                      ; and print it
 L006D:
         POP  BC
-        LD   HL,$0365                   ; Address for "ERROR" message
+        LD   HL,ERRORMSG                ; Address for "ERROR" message
 L0071:
         PUSH DE                         ; Save old DE value
         EX   DE,HL                      ; Get print address into DE
-        CALL L0025                      ; Print (DE) chars fro (DE+01) pointer
+        CALL PRNTSTR                    ; Print (DE) chars from (DE+01) pointer
         POP  DE                         ; Retrieve old DE
         LD   BC,$0077                   ; Save This location as return address
         PUSH BC                         ; onto stack
@@ -160,7 +174,7 @@ L007C:
         LD   B,(HL)
         PUSH BC                         ; And push it onto the stack, causing it to
         RET                             ; Become the "jump-to" address in the menu
-					; Very clever, indeed.
+					                    ; Very clever, indeed.
 ;-------------------------------------------------------------------------------
 L0091:
         CALL L0309
@@ -168,51 +182,51 @@ L0091:
 ;-------------------------------------------------------------------------------
 ; COMMAND VECTOR TABLE
 ;-------------------------------------------------------------------------------
-	.DW $02D1	; $00=$02D1 "INPUT" from port	
-	.DW $0119	; $01=$0119 "DSP R" - Registers		
-	.DW $0054	; $02=$0054 "CONT" continue Command
-	.DW $006D	; $03=$006D "INCR" ERROR
-	.DW $006D	; $04=$006D "WRITE" ERROR
-	.DW $00F0	; $05=$00F0 "DSP M" display memory
-	.DW $0352	; $06=$0352 "CANCL" clear the display
-	.DW $006D	; $07=$006D "SHIFT" key location, no key
-	.DW $01F5	; $08=$01F5 - "PAR 0" store DE to $3FF2
-	.DW $01FC	; $09=$01FC - "BEGIN" store DE to $3FF4
-	.DW $0202	; $0A=$0202 - "END"   store DE to $3FF6
-	.DW $0208	; $0B=$0208 - "DEST"  store DE to $3FF8
-	.DW $0276	; $0C=$0276 - "FIL M" fill memory
-	.DW $026D	; $0D=$026D - "MOV M" move memory
-	.DW $0284	; $0E=$0284 - "CMP M" compare mem
-	.DW $0242	; $0F=$0242 - "TST M" test memory
-	.DW $021D	; $10=$021D - "OX AC" ?
-	.DW $025C	; $11=$025C - "INV M" Invert Memory
-	.DW $01CA	; $12=$01CA - "SBK A" Set Breakpoint A
-	.DW $01D4	; $13=$01D4 - "SBK B" Set Breakpoint B
-	.DW $020E	; $14=$020E - "END +B"
-	.DW $0214	; $15=$0214 - "END -B"
-	.DW $01E5	; $16=$01E5 - "RBK A" Clear Breakpoint A
-	.DW $01ED	; $17=$01ED - "RBK B" Clear Breakpoint B
-	.DW $02D6	; $18=$02D6 "OUTPUT" to port
-	.DW $02B2	; $19=$02B2 "DSP S" Get USER SP value
-	.DW $004D	; $1A=$004D "GO" command
-	.DW $006D	; $1B=$006D "DECR" ERROR
-	.DW $006D	; $1C=$006D "INSERT" ERROR
-	.DW $1000	; $1D=$1000 "NX PM" ROM 2 VECTOR
-	.DW $0352	; $1E=$0352 "CLEAR" the display
-	.DW $006D	; $1F=$006D "SHIFT" key location, no key ERROR
-	.DW $0400	; $20=$0400 BURN PROM FROM DATA $3000-$33FF
-	.DW $040D	; $21=$040D BURN PROM FROM DATA $2000-$27FF (2K)
-	.DW $041A	; $22=$041A BURN PROM FROM DATA $1800-$3FFF (4K)
-	.DW $0427	; $23=$0427 BURN PROM FROM DATA $4000-$9FFF (8K)
-	.DW $0440	; $24=$0440
-	.DW $04B5	; $25=$04B5
-	.DW $049C	; $26=$049C
-	.DW $05FC	; $27=$05FC
-	.DW $0632	; $28=$0632
-	.DW $0638	; $29=$0638
-	.DW $04CB	; $2A=$04CB
-	.DW $06F8	; $2B=$06F8
-	.DW $006D	; $2C=$006D ERROR
+	.DW INPORTCMD	                    ; $00=$02D1 "INPUT" from port	
+	.DW $0119	                        ; $01=$0119 "DSP R" - Registers		
+	.DW $0054	                        ; $02=$0054 "CONT" continue Command
+	.DW $006D	                        ; $03=$006D "INCR" ERROR
+	.DW $006D	                        ; $04=$006D "WRITE" ERROR
+	.DW $00F0	                        ; $05=$00F0 "DSP M" display memory
+	.DW $0352	                        ; $06=$0352 "CANCL" clear the display
+	.DW $006D	                        ; $07=$006D "SHIFT" key location, no key
+	.DW $01F5	                        ; $08=$01F5 - "PAR 0" store DE to $3FF2
+	.DW $01FC	                        ; $09=$01FC - "BEGIN" store DE to $3FF4
+	.DW $0202	                        ; $0A=$0202 - "END"   store DE to $3FF6
+	.DW $0208	                        ; $0B=$0208 - "DEST"  store DE to $3FF8
+	.DW $0276	                        ; $0C=$0276 - "FIL M" fill memory
+	.DW $026D	                        ; $0D=$026D - "MOV M" move memory
+	.DW $0284	                        ; $0E=$0284 - "CMP M" compare mem
+	.DW $0242	                        ; $0F=$0242 - "TST M" test memory
+	.DW $021D	                        ; $10=$021D - "OX AC" ?
+	.DW $025C	                        ; $11=$025C - "INV M" Invert Memory
+	.DW $01CA	                        ; $12=$01CA - "SBK A" Set Breakpoint A
+	.DW $01D4	                        ; $13=$01D4 - "SBK B" Set Breakpoint B
+	.DW $020E	                        ; $14=$020E - "END +B"
+	.DW $0214	                        ; $15=$0214 - "END -B"
+	.DW $01E5	                        ; $16=$01E5 - "RBK A" Clear Breakpoint A
+	.DW $01ED	                        ; $17=$01ED - "RBK B" Clear Breakpoint B
+	.DW OUTPORTCMD	                    ; $18=$02D6 "OUTPUT" to port
+	.DW $02B2	                        ; $19=$02B2 "DSP S" Get USER SP value
+	.DW $004D	                        ; $1A=$004D "GO" command
+	.DW $006D	                        ; $1B=$006D "DECR" ERROR
+	.DW $006D	                        ; $1C=$006D "INSERT" ERROR
+	.DW $1000	                        ; $1D=$1000 "NX PM" ROM 2 VECTOR
+	.DW $0352	                        ; $1E=$0352 "CLEAR" the display
+	.DW $006D	                        ; $1F=$006D "SHIFT" key location, no key ERROR
+	.DW $0400	                        ; $20=$0400 BURN PROM FROM DATA $3000-$33FF
+	.DW $040D	                        ; $21=$040D BURN PROM FROM DATA $2000-$27FF (2K)
+	.DW $041A	                        ; $22=$041A BURN PROM FROM DATA $1800-$3FFF (4K)
+	.DW $0427	                        ; $23=$0427 BURN PROM FROM DATA $4000-$9FFF (8K)
+	.DW $0440	                        ; $24=$0440
+	.DW $04B5	                        ; $25=$04B5
+	.DW $049C	                        ; $26=$049C
+	.DW $05FC	                        ; $27=$05FC
+	.DW $0632	                        ; $28=$0632
+	.DW $0638	                        ; $29=$0638
+	.DW $04CB	                        ; $2A=$04CB
+	.DW $06F8	                        ; $2B=$06F8
+	.DW $006D	                        ; $2C=$006D ERROR
 ;-------------------------------------------------------------------------------
 ; A command vectors to this point
         EX   DE,HL                      ; MOVES DE TO HL, HL TO DE
@@ -554,12 +568,14 @@ L02AC:
 ;-------------------------------------------------------------------------------
 ; Input from Port
 ;-------------------------------------------------------------------------------
+INPORTCMD:
         LD   C,E                        ; Get Port address in E
         IN   A,(C)                      ; Input data from that port
         JR   L02DA                      ; Move C to the display plus "_ _ _ _"
 ;-------------------------------------------------------------------------------
 ; Output to Port
 ;-------------------------------------------------------------------------------
+OUTPORTCMD:
         LD   C,D                        ; Get Port address in D
         OUT  (C),E                      ; Output E data to port D
         LD   A,E                        ; Get that data into accum
@@ -654,33 +670,37 @@ L033E:
         OUT  ($78),A                    ; Output the "_"
         RET  
 L0343:
-        CALL L06C6                      ; ???
+        CALL L06C6                      ; Setup the PIT and the SIO
 
 ;-------------------------------------------------------------------------------
 ; Intialize the 8279 Keyboard / Display Controller IC
 ;-------------------------------------------------------------------------------
-        LD   A,$00                      ; 8 each 8-bit chars  - chars start Left
-        OUT  ($79),A                    ; Encoded 8x8 matrix keypad
+        LD   A,$00                      ; 8-digit display with left entry, Encoded 8x8 keyboard with 2-key lockout
+        OUT  (I8279_CMD),A              ;
         LD   A,$3F                      ; Set prescaler clock at 64kHz
-        OUT  ($79),A
+        OUT  (I8279_CMD),A              ;
         LD   A,$C2                      ; Clears only the FIFO status
-        OUT  ($79),A
+        OUT  (I8279_CMD),A              ;
+;-------------------------------------------------------------------------------
+; Clear the display
+;-------------------------------------------------------------------------------
 L0352:
         LD   A,$D0                      ; Sets the display to all zero bits on clr
-        OUT  ($79),A
+        OUT  (I8279_CMD),A
 L0356:
-        IN   A,($79)                    ; Get the status word
+        IN   A,(I8279_CMD)              ; Get the status word
         RLCA                            ; Rotate "display unavailable" bit into CY
         JR   C,L0356                    ; and repeat until display becomes avail
         RET  
 ;-------------------------------------------------------------------------------
 ; Text for 8279 display
 ;-------------------------------------------------------------------------------
-
+HELLOMSG:
 	.DB $08        				         ; 8 characters following
 	.DB $9E,$CB,$C2,$C2,$D7,$08,$08,$08
 ;         H   E   L   L   O   -   -   -
 
+ERRORMSG:
 	.DB $08					             ; 8 characters following
 	.DB $CB,$88,$D8,$88,$88,$08,$08,$08
 ;         E   R   O   R   R   -   -   -
@@ -968,7 +988,7 @@ L0554:
         OUT  ($62),A                    ; Set Port C latch
         LD   A,$71                      ; 0111 0001 Binary
         OUT  ($62),A                    ; Set Port C latch
-        IN   A,($61)                    ; Input Port B (verify?)
+        IN   A,($61)                    ; Input Port B
         PUSH AF                         ; Save it
         LD   A,$90                      ; 8255 Mode Word
         OUT  ($63),A                    ; Port A=Input, *B=Output*, C=Output
@@ -1230,13 +1250,13 @@ L06C4:
 ;-------------------------------------------------------------------------------
 L06C6:
         LD   E,$02                      ; Load up the PIT 8253 clock generator 2
-        LD   HL,$0470                   ; Generates 110 Baud (1,760 Hz)
+        LD   HL,$0470                   ; Generates 110 Baud ($0470 = 1,760 Hz)
         CALL L06FB                      ; Write this to counter 2
         LD   E,$01                      ; Load up data for counter 1
-        LD   HL,$01A1                   ; Generates 300 Baud (4796 Hz)
+        LD   HL,$01A1                   ; Generates 300 Baud ($01A1 = 4796 Hz)
         CALL L06FB                      ; Write this to counter 1
         LD   E,$00                      ; Counter 0
-        LD   HL,$001A                   ; Generates 4800 Baud (76,923 Hz)
+        LD   HL,$000D                   ; Generates 4800 Baud ($000D = 9600 baud) ($001A = 76,923 Hz)
         CALL L06FB                      ; Start the PIT to generate baud rates
         LD   HL,$06EE                   ; Get the SIO data
         LD   C,SIO_CMD                  ; Set the SIO base port address
@@ -1256,7 +1276,7 @@ L06C6:
 ;  since this IC generates the baud rates, use with caution you may kill your
 ;  connection to the terminal
 ;-------------------------------------------------------------------------------
-        CALL    $02A3		; Get xxxx into DE, yyyy into HL
+        CALL    $02A3		            ; Get xxxx into DE, yyyy into HL
 L06FB:
         SUB  A                          ; Clear A
         CP   E                          ; E contains PIT number
@@ -1269,7 +1289,7 @@ L0704:
         INC  C                          ; Increment port address
         DJNZ L0704                      ; Until all 3 counters are programmed
 L0709:
-        OUT  ($6F),A                    ; Command word (mode)
+        OUT  (PIT_CMD),A                ; Command word (mode)
         OUT  (C),L                      ; Low byte of counter
         OUT  (C),H                      ; Hi  byte of counter
         RET                             ; and done
@@ -1277,28 +1297,28 @@ L0709:
 ; Loop a character thru the SIO, receive and echo it back to the terminal
 ;-------------------------------------------------------------------------------
 L0710:
-        CALL L071D                      ; Receive a character from the SIO
+        CALL SIORX                      ; Receive a character from the SIO
 L0713:
         PUSH AF                         ; Save the character
 L0714:
-        CALL L0727                      ; Check the status
+        CALL SIOSTAT                    ; Check the status
         JR   Z,L0714                    ; Loop until TX buffer is empty
         POP  AF                         ; Get the character back
-        OUT  (SIO_DATA),A                ; And transmit it out
+        OUT  (SIO_DATA),A               ; And transmit it out
         RET  
 ;-------------------------------------------------------------------------------
 ; Receive a character from the SIO
 ;-------------------------------------------------------------------------------
-L071D:
-        CALL L0727                      ; Check the SIO status
-        JR   NC,L071D                   ; and Loop until a byte is received
+SIORX:
+        CALL SIOSTAT                    ; Check the SIO status
+        JR   NC,SIORX                   ; and Loop until a byte is received
         IN   A,(SIO_DATA)               ; Get the byte
         AND  $7F                        ; Strip off the D7 bit
         RET  
 ;-------------------------------------------------------------------------------
 ; Check the SIO status
 ;-------------------------------------------------------------------------------
-L0727:
+SIOSTAT:
         SUB  A                          ; Select Register 0
         OUT  (SIO_CMD),A                ; Send to SIO
         IN   A,(SIO_CMD)                ; Get status word
