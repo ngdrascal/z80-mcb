@@ -1258,7 +1258,7 @@ L06C6:
         LD   E,$00                      ; Counter 0
         LD   HL,$000D                   ; Generates 4800 Baud ($000D = 9600 baud) ($001A = 76,923 Hz)
         CALL L06FB                      ; Start the PIT to generate baud rates
-        LD   HL,$06EE                   ; Get the SIO data
+        LD   HL,L06EE                   ; Get the SIO data
         LD   C,SIO_CMD                  ; Set the SIO base port address
         LD   B,$0A                      ; and the counter for the data
         OUTI                            ; Output and wait
@@ -1270,13 +1270,13 @@ L06C6:
 ;-------------------------------------------------------------------------------
 ; DATA FOR SIO CHIP
 ;-------------------------------------------------------------------------------
-		.DB $18,$18,$04,$44,$05,$EA,$03,$C1,$01,$00
+L06EE:		.DB $18,$18,$04,$44,$05,$EA,$03,$C1,$01,$00
 ;-------------------------------------------------------------------------------
 ; Allows the user to set the PIT channel number and divisor
 ;  since this IC generates the baud rates, use with caution you may kill your
 ;  connection to the terminal
 ;-------------------------------------------------------------------------------
-        CALL    $02A3		            ; Get xxxx into DE, yyyy into HL
+        CALL $02A3	 	                ; Get xxxx into DE, yyyy into HL
 L06FB:
         SUB  A                          ; Clear A
         CP   E                          ; E contains PIT number
