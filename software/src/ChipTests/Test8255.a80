@@ -1,13 +1,19 @@
-;  To assemble: ../../tools/zmac -c -o ./Test8255.hex -o ../../tools/zout/Test8255.lst Test8255.a80
-;  To send to ROM emulator: py ../../tools/EPROM_NG_v2.0rc3.py -mem 2716 -spi y -auto y ./Test8255.hex com8
+;  To assemble:
+;    ../../tools/zmac -c -o ./Test8255.hex -o ../../tools/zout/Test8255.lst Test8255.a80
+;  To send to ROM emulator: 
+;    py ../../tools/EPROM_NG_v2.0rc3.py -mem 2716 -spi y -auto y ./Test8255.hex com8
  
-            .org 0000h
-start:
-    LD      A,$8B  ; Initialize the 8255 control port
-    OUT     ($63)  ;   Port-A = out, Port-B = in, Port-C = in
-loop:
-    IN      ($61)  ; Get the switch values from Port-B
+I8255_1_CMD     .EQU $63
+I8255_1A_DATA   .EQU $60
+I8255_1B_DATA   .EQU $61
+I8255_1C_DATA   .EQU $62
 
-    OUT     ($60)  ; Output switch values to Port-A
-    JR loop
+                .ORG 0000h
+START:
+        LD   A,$8B                      ; Initialize the 8255 control port
+        OUT  (I8255_1_CMD),A           ;   Port-A = out, Port-B = in, Port-C = in
+LOOP:
+        IN   A,(I8255_1B_DATA)          ; Get the switch values from Port-B
+        OUT  (I8255_1A_DATA),A          ; Output switch values to Port-A
+        JR   loop
    
