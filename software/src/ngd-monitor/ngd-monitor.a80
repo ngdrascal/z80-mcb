@@ -1,0 +1,429 @@
+; ******************************************************************************
+; Writing my own monitor borrowing heavily from others.
+; Rick Dodd - Feburary 2022
+; ******************************************************************************
+;  To assemble:
+;    ../../tools/zmac -c -o ./ngd-monitor.hex -o ../../tools/zout/ngd-monitor.lst ngd-monitor.a80
+;  To send to ROM emulator:
+;    py ../../tools/EPROM_NG_v2.0rc3.py -mem 2716 -spi y -auto y ./ngd-monitor.hex com8
+; ******************************************************************************
+
+SIOA_DATA       .EQU $74
+SIOA_CMD        .EQU $76
+SIOB_DATA       .EQU $75
+SIOB_CMD        .EQU $77
+SIO_DATA        .EQU SIOB_DATA          ; Make it easy to change between the A and B ports
+SIO_CMD         .EQU SIOB_CMD
+
+I8253_CTRL      .EQU $6F
+I8253_CTR0      .EQU $6C
+I8253_CTR1      .EQU $6D
+I8253_CTR2      .EQU $6E
+
+I8279_CMD       .EQU $79
+I8279_DATA      .EQU $78
+
+I8255_1A_DATA   .EQU $60
+I8255_1B_DATA   .EQU $61
+I8255_1C_DATA   .EQU $62
+I8255_1_CMD     .EQU $63
+
+                .ORG $3000
+CmdBufferSize   .EQU  40
+CmdBuffer       .DEFS CmdBufferSize + 1     ; The first byte holds the length
+
+KEY_CR          .EQU $0D
+KEY_LF          .EQU $0A
+KEY_BS          .EQU $08
+
+                .ORG $37FF
+STACKORIGIN     .EQU $
+
+;---------------------------------------------------------------------------------------------------
+; DESCRIPTION:
+;   Entry point when the ~RESET line is brought low.  A.K.A. - RST00.
+; INPUTS:
+;   None.
+; OUTPUTS:
+;   None.
+;---------------------------------------------------------------------------------------------------
+             .ORG $0000
+Reset:
+        DI                              ; Disable interrupts while configuring the system
+        LD   SP,STACKORIGIN             ; Initialize the stack pointer
+        JP   ColdBoot                   ; Initialize the hardware
+
+;---------------------------------------------------------------------------------------------------
+; DESCRIPTION:
+;   Retrieve a byte of data from the SIO device if one is available. This routine is non-blocking.
+; INPUTS:
+;   None.
+; OUTPUTS:
+;   Reg A: the byte retrieved, undefined if a byte is not available
+;   Flag Z: 1 if a byte was NOT available, 0 when a byte is available
+;---------------------------------------------------------------------------------------------------
+             .ORG $0008
+RxData:
+        RET
+
+;---------------------------------------------------------------------------------------------------
+; DESCRIPTION:
+;   Retrieve a byte of data from the SIO device.  Waits until one is available. This routine is
+;   blocking.
+; INPUTS:
+;   None.
+; OUTPUTS:
+;   Reg A: the byte retrieved
+;---------------------------------------------------------------------------------------------------
+             .ORG $0010
+RxDataWait:
+        CALL GetCh
+        RET
+
+;---------------------------------------------------------------------------------------------------
+; DESCRIPTION:
+;   Send a byte of data to the SIO.  Waits for the SIO to be available to send. This is blocking.
+; INPUTS:
+;   Reg A: the byte to send
+; OUTPUTS:
+;   None.
+;---------------------------------------------------------------------------------------------------
+             .ORG $0020
+TxData:
+        CALL PutCh
+        RET
+
+;---------------------------------------------------------------------------------------------------
+; DESCRIPTION:
+;   Interrupt Service Routine for all non-maskable interrupts.  (Interrupt Mode = 1)
+; INPUTS:
+;   None.
+; OUTPUTS:
+;   None.
+;---------------------------------------------------------------------------------------------------
+             .ORG $0038
+ISR:
+        RETI                            ; Return from interrupt
+
+;===================================================================================================
+;===================================================================================================
+; System initialization routines
+;===================================================================================================
+;===================================================================================================
+
+;---------------------------------------------------------------------------------------------------
+; DESCRIPTION:
+;   Initialize all the peripheral chips.
+; INPUTS:
+;   None.
+; OUTPUTS:
+;   None.
+;---------------------------------------------------------------------------------------------------
+ColdBoot:
+        IM   1                          ; Interrupt Mode = 1, address $0038 is the hander
+        CALL Init8253
+        CALL InitSio
+        CALL Init8279
+        EI                              ; Initialization complete, enable the interrupts
+        JP   ProcessCommands
+
+;---------------------------------------------------------------------------------------------------
+; DESCRIPTION:
+;   Initialize the Intel 8253 Programable Interval Timer (PIT).
+; INPUTS:
+;   None.
+; OUTPUTS:
+;   None.
+;---------------------------------------------------------------------------------------------------
+Init8253:
+        LD   A,$36                      ; Counter 0: load lsb,msb; square wave, binary
+        OUT  (I8253_CTRL),A             ; Send it to control port
+        LD   A,$0D                      ; low order byte ($000D = 154kHz (9600 x 16)
+        OUT  (I8253_CTR0),A             ;
+        LD   A,$00                      ; Send the rest; high order byte
+        OUT  (I8253_CTR0),A             ;
+        RET
+
+;---------------------------------------------------------------------------------------------------
+; DESCRIPTION:
+;   Initialize the z80 SIO serial interface.
+; INPUTS:
+;   None.
+; OUTPUTS:
+;   None.
+;---------------------------------------------------------------------------------------------------
+InitSio:
+                                        ; Channel A
+        LD   A,$00                      ; select WR0
+        OUT  (SIOA_CMD),A
+        LD   A,$18                      ; channel reset
+        OUT  (SIOA_CMD),A
+
+        LD   A,$04                      ; select WR4
+        OUT  (SIOA_CMD),A
+        LD   A,$44                      ; $44 = Clock-Mode: 16x; Stop-Bits: 1; Parity: none
+        OUT  (SIOA_CMD),A
+
+        LD   A,$01                      ; select WR1
+        OUT  (SIOA_CMD),A
+        LD   A,$00                      ; $00 = waiting: off; interrupts: off
+        OUT  (SIOA_CMD),A
+
+        LD   A,$03                      ; select WR3
+        OUT  (SIOA_CMD),A
+        LD   A,$E1                      ; $E1 = Rx 8 bits/char; Auto-Enables: true; Rx-Enabled: true;
+        OUT  (SIOA_CMD),A
+
+        LD   A,$05                      ; select WR5
+        OUT  (SIOA_CMD),A
+        LD   A,$68                      ; $EA = DTR: false; Tx 8 bits/chars; Send-Break: false; Tx: true; RTS: false
+        OUT  (SIOA_CMD),A
+
+                                        ; Channel B
+        LD   A,$00                      ; select WR0
+        OUT  (SIOB_CMD),A
+        LD   A,$18                      ; channel reset
+        OUT  (SIOB_CMD),A
+
+        LD   A,$04                      ; select WR4
+        OUT  (SIOB_CMD),A
+        LD   A,$44                      ; $44 = Clock-Mode: 16x; Stop-Bits: 1; Parity: none
+        OUT  (SIOB_CMD),A
+
+        LD   A,$01                      ; select WR1
+        OUT  (SIOB_CMD),A
+        LD   A,$00                      ; $00 = waiting: off; interrupts: off
+        OUT  (SIOB_CMD),A
+
+        LD   A,$03                      ; select WR3
+        OUT  (SIOB_CMD),A
+        LD   A,$E1                      ; $E1 = Rx 8 bits/char; Auto-Enables: true; Rx-Enabled: true;
+        OUT  (SIOB_CMD),A
+
+        LD   A,$05                      ; select WR5
+        OUT  (SIOB_CMD),A
+        LD   A,$68                      ; $EA = DTR: false; Tx 8 bits/chars; Send-Break: false; Tx: true; RTS: false
+        OUT  (SIOB_CMD),A
+
+        RET
+
+;---------------------------------------------------------------------------------------------------
+; DESCRIPTION:
+;   Initialize the Intel 8279 Programmable Keyboard/Display Interface.
+; INPUTS:
+;   None.
+; OUTPUTS:
+;   None.
+;---------------------------------------------------------------------------------------------------
+Init8279:
+        LD   A,$00                      ; 8-digit display with left entry, Encoded 8x8 keyboard with 2-key lockout
+        OUT  (I8279_CMD),A              ;
+        LD   A,$3F                      ; Set prescaler clock at 64kHz
+        OUT  (I8279_CMD),A              ;
+        LD   A,$C2                      ; Clears only the FIFO status
+        OUT  (I8279_CMD),A              ;
+
+        RET
+
+;===================================================================================================
+;===================================================================================================
+; Basic IO routines
+;===================================================================================================
+;===================================================================================================
+
+;---------------------------------------------------------------------------------------------------
+; DESCRIPTION:
+;   Gets the RX and TX statuses of the SIO device.
+; INPUTS:
+;   None.
+; OUTPUTS:
+;   Reg-A: undefined
+;   Flag C: set if data is available to read
+;   Flag Z: set if the TX buffer is empty (i.e. - ready to send)
+;---------------------------------------------------------------------------------------------------
+GetTtyStatus:
+        LD   A,$00                      ; Select Register 0
+        OUT  (SIO_CMD),A                ;
+        IN   A,(SIO_CMD)                ; Get status word
+        RRCA                            ; Rotate RX status ready into CY flag
+        BIT  1,A                        ; Test bit 1 for TX buffer empty, this will set the Z flag
+        RET
+
+;---------------------------------------------------------------------------------------------------
+; DESCRIPTION:
+;   Retrieve a byte of data from the SIO device.  Waits until one is available. This routine is
+;   blocking.
+; INPUTS:
+;   None.
+; OUTPUTS:
+;   Reg A: the byte retrieved
+;---------------------------------------------------------------------------------------------------
+GetCh:
+        CALL GetTtyStatus               ; Get the stutus of the SIO device
+        JR   NC,GetCh                 ; Repeat until data is available
+        IN   A,(SIO_DATA)               ; Retrieve the data
+        AND  $7F                        ; Clear bit 7 (bit 7 is not used in ASCII)
+        RET
+
+;---------------------------------------------------------------------------------------------------
+; DESCRIPTION:
+;   Send a byte of data to the SIO.  Waits for the SIO to be available to send. This is blocking.
+; INPUTS:
+;   Reg A: the byte to send
+; OUTPUTS:
+;   None.
+;---------------------------------------------------------------------------------------------------
+PutCh:
+        PUSH AF
+        CALL GetTtyStatus               ; Get the stutus of the SIO device
+        JR   Z,PutCh                  ; Repeat until the Tx buffer is empty
+        POP  AF
+        OUT  (SIO_DATA),A               ; Send the data
+        RET
+
+;---------------------------------------------------------------------------------------------------
+; DESCRIPTION:
+;   Sends a string to the serial port.  The format of the string is a 1 byte length field followed
+;   by <length> number of characters.
+;   Example: .DB $07,'M','o','n','i','t','o','r'
+; INPUTS:
+;   Reg DE: address of the first byte of the string (the <length> field)
+; OUTPUTS:
+;   None.
+;---------------------------------------------------------------------------------------------------
+PrintStr:
+        ;PUSH AF
+        ;PUSH B
+
+        LD   A,(DE)                     ; Get the first byte (the length)
+        LD   B,A                        ; B is automatically decremented by the DJNZ instruction
+PSLoop:
+        INC  DE                         ; Point to the next printable char
+        LD   A,(DE)                     ; Load the char to print into A
+        CALL PutCh                      ; Send the char to the SIO
+        DJNZ PSLoop                     ; And repeat until done
+
+        ;POP  B
+        ;POP  AF
+        RET
+
+;---------------------------------------------------------------------------------------------------
+; DESCRIPTION:
+;   Reads a string of characters from the SIO and stores it in a buffer.  The string is terminated
+;   with a carriage return.  Backspaces are handled.  CTRL-C quits and discards the previous input.
+; INPUTS:
+;   Reg DE: Address of buffer
+;   Reg B:  Max number of chars to read
+; OUTPUTS:
+;   Reg HL: End of string
+;   Reg DE: Start of string
+;   Reg B:  Number of chars remaining unused
+;   Reg C:  Number of chars entered
+;---------------------------------------------------------------------------------------------------
+ReadStr:
+        LD   C,0                        ; C holds the count of chars read
+        LD   H,D                        ; Remember the statring address of the string
+        LD   L,E
+        INC  HL                         ; The 1st byte is the length of the string, so start with 2nd
+RS_loop:
+        CALL GetCh                      ; Get the next typed character
+
+        CP   KEY_CR                     ; Is it a carriage return?
+        JR   Z,RS_Done                  ; Then we are done
+
+        CP   KEY_BS                     ; Is it a backspace?
+        JR   Z,RS_BS                    ;
+
+        LD   (HL),A                     ; Store the char in the buffer
+        INC  HL                         ; Move to the next byte in the buffer
+
+        INC C                           ; Increment our key count
+
+        CALL PutCh                      ; Echo the char back to the screen
+        DJNZ RS_Loop
+RS_Done:
+        LD   A,C
+        LD   (DE),A                     ; Save the length of the str to the first byte
+        RET
+
+RS_BS:
+        INC  C                          ; Trick to quickly check if a non A register is zero
+        DEC  C
+        JR   Z,RS_Loop                  ; Don't do anything because we are at the beginning of the line
+
+        INC  B                          ; We now have one more remaining spot in the buffer
+        LD   (HL),255                   ; Put an EOL char in
+        DEC  HL
+        LD   A,' '
+        LD   (HL),A                     ; add a space to overwrite last typed char
+        ; PUSH HL
+        ; CALL GetCursorPos
+        ; LD   A,H
+        ; SUB  C                          ; Move the Text cursor back the number of chars (so we can redraw the whole string
+        ; LD   H,A
+        ; CALL Locate
+        ; POP  HL
+        ; PUSH HL
+        ; LD   H,D                        ; Get back start of string from DE
+        ; LD   L,E
+        ; CALL PrintStr                ; Redraw the string
+        ; CALL GetCursorPos
+        ; DEC  H
+        ; CALL Locate                     ; Position the cursor for typing the next char
+        ; POP  HL
+        ; DEC  C
+        JR   RS_loop                    ; Do it all over again
+
+;===================================================================================================
+;===================================================================================================
+; Command handling routines
+;===================================================================================================
+;===================================================================================================
+
+;---------------------------------------------------------------------------------------------------
+; DESCRIPTION:
+;   This is the main loop of the program.  Read a command from the serial terminal and exectue it.
+;   Repeat.
+; INPUTS:
+;   None.
+; OUTPUTS:
+;   None.
+;---------------------------------------------------------------------------------------------------
+ProcessCommands:
+        LD   DE,PromptMsg
+        CALL PrintStr
+
+        LD   B,CmdBufferSize
+        LD   DE,CmdBuffer
+        CALL ReadStr
+
+        LD   A,KEY_CR
+        CALL PutCh
+        LD   A,KEY_LF
+        CALL PutCh
+
+        LD   DE,CmdBuffer
+        CALL PrintStr
+        HALT
+
+        JP   ProcessCommands            ; Do it all over again
+;---------------------------------------------------------------------------------------------------
+
+
+WelcomeMsg  .DB $10,'ngd-monitor v0.1'
+PromptMsg   .DB $02, '>>'
+
+
+
+
+
+
+
+;---------------------------------------------------------------------------------------------------
+; DESCRIPTION:
+;
+; INPUTS:
+;   None.
+; OUTPUTS:
+;   None.
+;---------------------------------------------------------------------------------------------------
