@@ -1,1 +1,3 @@
 software/tools/**
+software/src/ngd-monitor/*.lst
+software/src/ngd-monitor/*.obj
