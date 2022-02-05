@@ -397,6 +397,9 @@ RS_BS:
 ;   None.
 ;---------------------------------------------------------------------------------------------------
 ProcessCommands:
+        LD   DE,WelcomeMsg
+        CALL PrintStr
+PC_Loop:
         LD   DE,PromptMsg
         CALL PrintStr
 
@@ -413,11 +416,11 @@ ProcessCommands:
         CALL PrintStr
         HALT
 
-        JP   ProcessCommands            ; Do it all over again
+        JP   PC_Loop                    ; Do it all over again
 ;---------------------------------------------------------------------------------------------------
 
 
-WelcomeMsg  .DB $10,'ngd-monitor v0.1'
+WelcomeMsg  .DB $12,'ngd-monitor v0.1',$0D,$0A
 PromptMsg   .DB $02, '? '
 
 
