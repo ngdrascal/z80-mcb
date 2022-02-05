@@ -1,0 +1,24 @@
+{
+    // See https://go.microsoft.com/fwlink/?LinkId=733558
+    // for the documentation about the tasks.json format
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "Assemble and Load to Emulator",
+            "type": "shell",
+            "windows": {
+                "command": "./software/tools/assemble.ps1",
+                "args": [
+                    "${fileDirname}\\${fileBasenameNoExtension}.hex",
+                    "${workspaceFolder}\\software\\tools\\zout\\${fileBasenameNoExtension}.lst",
+                    "${file}"
+                ]
+            },
+            "presentation": {
+                "reveal": "always",
+                "panel": "dedicated"
+            },
+            "problemMatcher": []
+        }
+    ]
+}
