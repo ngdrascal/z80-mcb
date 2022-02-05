@@ -35,6 +35,7 @@ CmdBuffer       .DEFS CmdBufferSize + 1     ; The first byte holds the length
 KEY_CR          .EQU $0D
 KEY_LF          .EQU $0A
 KEY_BS          .EQU $08
+KEY_SP          .EQU $20
 
                 .ORG $37FF
 STACKORIGIN     .EQU $
@@ -354,8 +355,14 @@ RS_BS:
         INC  B                          ; We now have one more remaining spot in the buffer
         LD   (HL),255                   ; Put an EOL char in
         DEC  HL
-        LD   A,' '
-        LD   (HL),A                     ; add a space to overwrite last typed char
+        LD   A,KEY_SP                   ; overwrite the last captured char in the buffer with a space
+        LD   (HL),A
+        LD   A,KEY_BS                   ; Move the cursor back one char
+        CALL PutCh
+        LD   A,KEY_SP                   ; Overwrite the char on the screen with a space
+        CALL PutCh
+        LD   A,KEY_BS                   ; Move the cursor back one char
+        CALL PutCh
         ; PUSH HL
         ; CALL GetCursorPos
         ; LD   A,H
@@ -411,7 +418,7 @@ ProcessCommands:
 
 
 WelcomeMsg  .DB $10,'ngd-monitor v0.1'
-PromptMsg   .DB $02, '>>'
+PromptMsg   .DB $02, '? '
 
 
 
