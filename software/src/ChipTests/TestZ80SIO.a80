@@ -17,10 +17,10 @@ SIOB_CMD        .EQU $77
 STACK           .EQU $
 
                 .org 0000h
-initStack:
+InitStack:
         LD   SP,STACK
 
-init8253:
+Init8253:
         LD   A,$36                      ; Set counter 0 to square wave, binary and prepare to load
         OUT  (I8253_CTRL),A
         LD   A,$0D                      ; low order byte ($00D0 = 154kHz (9600 x 16)
@@ -28,7 +28,7 @@ init8253:
         LD   A,$00                      ; Send the rest; high order byte
         OUT  (I8253_CNT0),A
 
-initSIO:
+InitSIO:
         ; Channel B
         LD   A,$00                      ; select WR0
         OUT  (SIOB_CMD),A
@@ -55,24 +55,32 @@ initSIO:
         LD   A,$68                      ; $EA = DTR = false; Tx 8 bits/chars; Send-Break = false; Tx = true; RTS = false
         OUT  (SIOB_CMD),A
 
-        ; print "Hello." to the terminal
-        LD   A,'H'
-        CALL txCharB
-        LD   A,'e'
-        CALL txCharB
-        LD   A,'l'
-        CALL txCharB
-        CALL txCharB
-        LD   A,'o'
-        CALL txCharB
-        LD   A,'.'
-        CALL txCharB
+        LD   DE,message
+        CALL PrintStr
 
         ; echo input chars back to output
-infinity:
-        CALL rxCharB                    ; output- A reg: character from input
-        CALL txCharB                    ; input-  A reg: has character to output
-        JP   infinity
+Infinity:
+        CALL RxCharB                    ; output- A reg: character from input
+        CALL TxCharB                    ; input-  A reg: has character to output
+        JP   Infinity
+
+;===============================================================================
+; DESCRIPTION:
+;   Gets the RX and TX statuses of the SIO device.
+; INPUTS:
+;   None.
+; OUTPUTS:
+;   Reg-A: undefined
+;   Flag C: set if data is available to read
+;   Flag Z: set if the TX buffer is empty (i.e. - ready to send)
+;-------------------------------------------------------------------------------
+SioStatus:
+        LD   A,$00                      ; Select Register 0
+        OUT  (SIOB_CMD),A               ;
+        IN   A,(SIOB_CMD)               ; Get status word
+        RRCA                            ; Rotate RX status ready into CY flag
+        BIT  1,A                        ; Test bit 1 for TX buffer empty, this will set the Z flag
+        RET
 
 ;===============================================================================
 ; Description:
@@ -82,12 +90,11 @@ infinity:
 ; OUTPUTS:
 ;   <none>
 ;-------------------------------------------------------------------------------
-txCharB:
+TxCharB:
         PUSH AF
-txCharB1:
-        IN   A,(SIOB_CMD)               ; Status byte D2=TX Buff Empty, D0=RX char available
-        BIT  2,A                        ; Set Zero flag if still transmitting character
-        JR   Z,txCharB1                 ; Loop until SIO flag signals ready
+TxCharB1:
+        CALL SioStatus                  ; Z = 0 when transmitter is busy
+        JR   Z,TxCharB1                 ; Loop until SIO flag signals ready
         POP  AF                         ; Retrieve character
         OUT  (SIOB_DATA),A              ; Output the character
         RET
@@ -101,12 +108,40 @@ txCharB1:
 ; OUTPUTS:
 ;   A reg: character retrieved
 ;-------------------------------------------------------------------------------
-rxCharB:
+RxCharB:
         PUSH AF
-rxCharB1:
-        IN   A,(SIOB_CMD)               ; Status byte D2=TX Buff Empty, D0=RX char ready
-        BIT  0,A                        ; Set the Zero flag if still waiting for a character
-        JR   Z,rxCharB1                 ; Loop until SIO flag a character is ready
+RxCharB1:
+        CALL SioStatus                  ; C = 0 when transmitter is busy
+        JR   NC,RxCharB1                ; Loop until SIO flag a character is ready
         POP  AF
         IN   A,(SIOB_DATA)              ; Read the data from 
         RET
+
+;===============================================================================
+; DESCRIPTION:
+;   Sends a string to the serial port.  The format of the string is a 1 byte 
+;   length field followed by <length> number of characters.
+;
+;   Example: .DB $07,'M','o','n','i','t','o','r'
+; INPUTS:
+;   Reg DE: address of the first byte of the string (the <length> field)
+; OUTPUTS:
+;   None.
+;-------------------------------------------------------------------------------
+PrintStr:
+        PUSH AF
+        PUSH B
+
+        LD   A,(DE)                     ; Get the first byte (the length)
+        LD   B,A                        ; B is automatically decremented by the DJNZ instruction
+PSLoop:
+        INC  DE                         ; Point to the next printable char
+        LD   A,(DE)                     ; Load the char to print into A
+        CALL TxCharB                    ; Send the char to the SIO
+        DJNZ PSLoop                     ; And repeat until done
+
+        POP  B
+        POP  AF
+        RET
+
+message .DB $0F,'Z80 SIO Test.',$0D,$0A
