@@ -4,9 +4,15 @@
 ; ******************************************************************************
 ;  To assemble:
 ;    ../../tools/zmac -c -o ./ngd-monitor.hex -o ../../tools/zout/ngd-monitor.lst ngd-monitor.a80
+;
+;    ../../tools/zmac -c -n -o ./ngd-monitor.tap -o ./ngd-monitor.lst ngd-monitor.a80
+;
+;    ..\..\tools\sjasmplus.exe --lst=ngd-monitor.lst --sld=ngd-monitor.sld --raw=ngd-monitor.bin --fullpath .\ngd-monitor.a80
 ;  To send to ROM emulator:
 ;    py ../../tools/EPROM_NG_v2.0rc3.py -mem 2716 -spi y -auto y ./ngd-monitor.hex com8
 ; ******************************************************************************
+                ;DEVICE NOSLOT64K
+                ;SLDOPT COMMENT WPMEM, LOGPOINT, ASSERTION
 
 SIOA_DATA       .EQU $74
 SIOA_CMD        .EQU $76
@@ -28,17 +34,10 @@ I8255_1B_DATA   .EQU $61
 I8255_1C_DATA   .EQU $62
 I8255_1_CMD     .EQU $63
 
-                .ORG $3000
-CmdBufferSize   .EQU  40
-CmdBuffer       .DEFS CmdBufferSize + 1     ; The first byte holds the length
-
 KEY_CR          .EQU $0D
 KEY_LF          .EQU $0A
 KEY_BS          .EQU $08
 KEY_SP          .EQU $20
-
-                .ORG $37FF
-STACKORIGIN     .EQU $
 
 ;---------------------------------------------------------------------------------------------------
 ; DESCRIPTION:
@@ -48,10 +47,10 @@ STACKORIGIN     .EQU $
 ; OUTPUTS:
 ;   None.
 ;---------------------------------------------------------------------------------------------------
-             .ORG $0000
+                .ORG $0000
 Reset:
         DI                              ; Disable interrupts while configuring the system
-        LD   SP,STACKORIGIN             ; Initialize the stack pointer
+        LD   SP,STACKTOP                ; Initialize the stack pointer
         JP   ColdBoot                   ; Initialize the hardware
 
 ;---------------------------------------------------------------------------------------------------
@@ -63,7 +62,7 @@ Reset:
 ;   Reg A: the byte retrieved, undefined if a byte is not available
 ;   Flag Z: 1 if a byte was NOT available, 0 when a byte is available
 ;---------------------------------------------------------------------------------------------------
-             .ORG $0008
+            .ORG $0008
 RxData:
         RET
 
@@ -76,7 +75,7 @@ RxData:
 ; OUTPUTS:
 ;   Reg A: the byte retrieved
 ;---------------------------------------------------------------------------------------------------
-             .ORG $0010
+            .ORG $0010
 RxDataWait:
         CALL GetCh
         RET
@@ -89,7 +88,7 @@ RxDataWait:
 ; OUTPUTS:
 ;   None.
 ;---------------------------------------------------------------------------------------------------
-             .ORG $0020
+            .ORG $0020
 TxData:
         CALL PutCh
         RET
@@ -102,7 +101,7 @@ TxData:
 ; OUTPUTS:
 ;   None.
 ;---------------------------------------------------------------------------------------------------
-             .ORG $0038
+            .ORG $0038
 ISR:
         RETI                            ; Return from interrupt
 
@@ -260,10 +259,12 @@ GetTtyStatus:
 ;   Reg A: the byte retrieved
 ;---------------------------------------------------------------------------------------------------
 GetCh:
-        CALL GetTtyStatus               ; Get the stutus of the SIO device
-        JR   NC,GetCh                 ; Repeat until data is available
-        IN   A,(SIO_DATA)               ; Retrieve the data
-        AND  $7F                        ; Clear bit 7 (bit 7 is not used in ASCII)
+        PUSH AF
+GC1:
+        CALL GetTtyStatus               ; C flag is set when receiver has a char
+        JR   NC,GC1                     ; Loop until SIO flag a character is ready
+        POP  AF
+        IN   A,(SIO_DATA)               ; Read the data from 
         RET
 
 ;---------------------------------------------------------------------------------------------------
@@ -276,10 +277,11 @@ GetCh:
 ;---------------------------------------------------------------------------------------------------
 PutCh:
         PUSH AF
-        CALL GetTtyStatus               ; Get the stutus of the SIO device
-        JR   Z,PutCh                  ; Repeat until the Tx buffer is empty
-        POP  AF
-        OUT  (SIO_DATA),A               ; Send the data
+PC1:
+        CALL GetTtyStatus               ; Z flag is set when transmitter is busy
+        JR   Z,PC1                      ; Loop until SIO flag signals ready
+        POP  AF                         ; Retrieve character
+        OUT  (SIO_DATA),A              ; Output the character
         RET
 
 ;---------------------------------------------------------------------------------------------------
@@ -293,8 +295,8 @@ PutCh:
 ;   None.
 ;---------------------------------------------------------------------------------------------------
 PrintStr:
-        ;PUSH AF
-        ;PUSH B
+        PUSH AF
+        PUSH BC
 
         LD   A,(DE)                     ; Get the first byte (the length)
         LD   B,A                        ; B is automatically decremented by the DJNZ instruction
@@ -304,8 +306,8 @@ PSLoop:
         CALL PutCh                      ; Send the char to the SIO
         DJNZ PSLoop                     ; And repeat until done
 
-        ;POP  B
-        ;POP  AF
+        POP  BC
+        POP  AF
         RET
 
 ;---------------------------------------------------------------------------------------------------
@@ -326,7 +328,7 @@ ReadStr:
         LD   H,D                        ; Remember the statring address of the string
         LD   L,E
         INC  HL                         ; The 1st byte is the length of the string, so start with 2nd
-RS_loop:
+RS_Loop:
         CALL GetCh                      ; Get the next typed character
 
         CP   KEY_CR                     ; Is it a carriage return?
@@ -379,7 +381,7 @@ RS_BS:
         ; CALL Locate                     ; Position the cursor for typing the next char
         ; POP  HL
         ; DEC  C
-        JR   RS_loop                    ; Do it all over again
+        JR   RS_Loop                    ; Do it all over again
 
 ;===================================================================================================
 ;===================================================================================================
@@ -414,16 +416,20 @@ PC_Loop:
 
         LD   DE,CmdBuffer
         CALL PrintStr
-        HALT
 
         JP   PC_Loop                    ; Do it all over again
 ;---------------------------------------------------------------------------------------------------
 
 
-WelcomeMsg  .DB $12,'ngd-monitor v0.1',$0D,$0A
-PromptMsg   .DB $02, '? '
+WelcomeMsg:     .DB $14,$0D,$0A,'ngd-monitor v0.1',$0D,$0A
+PromptMsg:      .DB $04, $0D,$0A,'? '
 
+                .ORG $3000
+CmdBufferSize:  .EQU  40
+CmdBuffer:      .DEFS CmdBufferSize + 1     ; The first byte holds the length
 
+                .ORG $37FF
+STACKTOP:       .EQU $
 
 
 
