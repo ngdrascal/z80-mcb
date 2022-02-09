@@ -365,22 +365,6 @@ RS_BS:
         CALL PutCh
         LD   A,KEY_BS                   ; Move the cursor back one char
         CALL PutCh
-        ; PUSH HL
-        ; CALL GetCursorPos
-        ; LD   A,H
-        ; SUB  C                          ; Move the Text cursor back the number of chars (so we can redraw the whole string
-        ; LD   H,A
-        ; CALL Locate
-        ; POP  HL
-        ; PUSH HL
-        ; LD   H,D                        ; Get back start of string from DE
-        ; LD   L,E
-        ; CALL PrintStr                ; Redraw the string
-        ; CALL GetCursorPos
-        ; DEC  H
-        ; CALL Locate                     ; Position the cursor for typing the next char
-        ; POP  HL
-        ; DEC  C
         JR   RS_Loop                    ; Do it all over again
 
 ;===================================================================================================
