@@ -402,6 +402,71 @@ PC_Loop:
         CALL PrintStr
 
         JP   PC_Loop                    ; Do it all over again
+
+;---------------------------------------------------------------------------------------------------
+; DESCRIPTION:
+;   Converts a byte to two ASCII characters.
+; INPUTS:
+;   Reg C: byte to convert
+;   Reg HL: points to buffer with a minimum size of 2
+; OUTPUTS:
+;   Reg HL: point to the byte after the 2 byte buffer
+;---------------------------------------------------------------------------------------------------
+Byte2Hex:
+        LD   A,$F0                      ; Mask off the lower nibble
+        AND  C                          ; Reg. A now has the high nibble
+        RRCA                            ; move the high nibble to the low nibble
+        RRCA                            ;
+        RRCA                            ;
+        RRCA                            ;
+        CALL Nibble2Hex                 ; Convert the nibble to an ASCII char
+        LD   A,$0F                      ;
+        AND  C                          ;
+        CALL Nibble2Hex                 ; Conver the nibble to an ASCII char
+	RET
+
+Nibble2Hex:
+        ADD  A,$30                      ; Convert to 0 to 15
+        CP   $3A                        ; If digit is 0 thru 9
+        JP   M,N2H1                     ; Save it in the buffer
+        ADD  A,7                        ; Convert 10 thru 15 to A thru F
+N2H1:
+        LD   (HL),A                     ; Store the value in the buffer
+        INC  HL                         ; Move pointer to next slot
+        RET
+
+;---------------------------------------------------------------------------------------------------
+; DESCRIPTION:
+;   Converts two ASCII characters to a byte.
+; INPUTS:
+;   Reg HL: points to buffer with a minimum size of 2
+; OUTPUTS:
+;   Reg A: value after the conversion
+;   Reg HL: point to the byte after the 2 byte buffer
+;---------------------------------------------------------------------------------------------------
+Hex2Byte:
+        LD   C,0                        ; Clear the results
+        LD   A,(HL)                     ; Load the first character
+        CALL Hex2Nibble                 ; Do the conversion
+        INC  HL                         ; Point to the second character
+        LD   A,(HL)                     ; Load the second character
+        CALL Hex2Nibble                 ; Do the conversion
+        INC  HL                         ; Point to the byte in the buffer afer the 2 character
+        RET
+Hex2Nibble:
+        SLA  C                          ; Align results
+        SLA  C                          ;
+        SLA  C                          ;
+        SLA  C                          ;
+        SUB  $30                        ; Convert to a value between 0 and 15
+        CP   10                         ; Check for A thru F
+        JP   M,H2N1                     ; If 0 thru 9
+        SUB  7                          ; Convert A thru F to 0 thru 9
+H2N1:
+        ADD  A,C                        ; Merge results
+        LD   C,A                        ; Save in C
+        RET
+        
 ;---------------------------------------------------------------------------------------------------
 
 
@@ -411,6 +476,9 @@ PromptMsg:      .DB $04, $0D,$0A,'? '
                 .ORG $3000
 CmdBufferSize:  .EQU  40
 CmdBuffer:      .DEFS CmdBufferSize + 1     ; The first byte holds the length
+
+HexBufferSize:  .EQU 4
+HexBuffer       .DEFS HexBufferSize + 1     ; The first byte hold the length
 
                 .ORG $37FF
 STACKTOP:       .EQU $
