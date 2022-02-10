@@ -5,7 +5,7 @@
 ;  To assemble:
 ;    ../../tools/zmac -c -o ./ngd-monitor.hex -o ../../tools/zout/ngd-monitor.lst ngd-monitor.a80
 ;
-;    ../../tools/zmac -c -n -o ./ngd-monitor.tap -o ./ngd-monitor.lst ngd-monitor.a80
+;    ../../tools/zmac -c -n -o ../../tools/zout/ngd-monitor.cim -o ../../tools/zout/ngd-monitor.lst ngd-monitor.a80
 ;
 ;    ..\..\tools\sjasmplus.exe --lst=ngd-monitor.lst --sld=ngd-monitor.sld --raw=ngd-monitor.bin --fullpath .\ngd-monitor.a80
 ;  To send to ROM emulator:
@@ -47,7 +47,7 @@ KEY_SP          .EQU $20
 ; OUTPUTS:
 ;   None.
 ;---------------------------------------------------------------------------------------------------
-                .ORG $0000
+             .ORG $0000
 Reset:
         DI                              ; Disable interrupts while configuring the system
         LD   SP,STACKTOP                ; Initialize the stack pointer
@@ -62,7 +62,7 @@ Reset:
 ;   Reg A: the byte retrieved, undefined if a byte is not available
 ;   Flag Z: 1 if a byte was NOT available, 0 when a byte is available
 ;---------------------------------------------------------------------------------------------------
-            .ORG $0008
+             .ORG $0008
 RxData:
         RET
 
@@ -75,7 +75,7 @@ RxData:
 ; OUTPUTS:
 ;   Reg A: the byte retrieved
 ;---------------------------------------------------------------------------------------------------
-            .ORG $0010
+             .ORG $0010
 RxDataWait:
         CALL GetCh
         RET
@@ -88,7 +88,7 @@ RxDataWait:
 ; OUTPUTS:
 ;   None.
 ;---------------------------------------------------------------------------------------------------
-            .ORG $0020
+             .ORG $0020
 TxData:
         CALL PutCh
         RET
@@ -101,7 +101,7 @@ TxData:
 ; OUTPUTS:
 ;   None.
 ;---------------------------------------------------------------------------------------------------
-            .ORG $0038
+             .ORG $0038
 ISR:
         RETI                            ; Return from interrupt
 
@@ -369,39 +369,9 @@ RS_BS:
 
 ;===================================================================================================
 ;===================================================================================================
-; Command handling routines
+; Data conversion routines
 ;===================================================================================================
 ;===================================================================================================
-
-;---------------------------------------------------------------------------------------------------
-; DESCRIPTION:
-;   This is the main loop of the program.  Read a command from the serial terminal and exectue it.
-;   Repeat.
-; INPUTS:
-;   None.
-; OUTPUTS:
-;   None.
-;---------------------------------------------------------------------------------------------------
-ProcessCommands:
-        LD   DE,WelcomeMsg
-        CALL PrintStr
-PC_Loop:
-        LD   DE,PromptMsg
-        CALL PrintStr
-
-        LD   B,CmdBufferSize
-        LD   DE,CmdBuffer
-        CALL ReadStr
-
-        LD   A,KEY_CR
-        CALL PutCh
-        LD   A,KEY_LF
-        CALL PutCh
-
-        LD   DE,CmdBuffer
-        CALL PrintStr
-
-        JP   PC_Loop                    ; Do it all over again
 
 ;---------------------------------------------------------------------------------------------------
 ; DESCRIPTION:
@@ -423,7 +393,7 @@ Byte2Hex:
         LD   A,$0F                      ; Mask off the upper nibble
         AND  C                          ; Reg. A now has the low nibble
         CALL Nibble2Hex                 ; Convert the nibble to an ASCII char
-	RET
+	    RET
 
 Nibble2Hex:
         ADD  A,$30                      ; Convert to 0 to 15
@@ -502,10 +472,45 @@ Hex2Word:
         LD   C,A                        ; Save the low order byte in C
         RET
 
+;===================================================================================================
+;===================================================================================================
+; Command handling routines
+;===================================================================================================
+;===================================================================================================
 
+;---------------------------------------------------------------------------------------------------
+; DESCRIPTION:
+;   This is the main loop of the program.  Read a command from the serial terminal and exectue it.
+;   Repeat.
+; INPUTS:
+;   None.
+; OUTPUTS:
+;   None.
+;---------------------------------------------------------------------------------------------------
+ProcessCommands:
+        LD   DE,WelcomeMsg
+        CALL PrintStr
+PC_Loop:
+        LD   DE,PromptMsg
+        CALL PrintStr
+
+        LD   B,CmdBufferSize
+        LD   DE,CmdBuffer
+        CALL ReadStr
+
+        LD   A,KEY_CR
+        CALL PutCh
+        LD   A,KEY_LF
+        CALL PutCh
+
+        LD   DE,CmdBuffer
+        CALL PrintStr
+
+        JP   PC_Loop                    ; Do it all over again
 
 
 ;---------------------------------------------------------------------------------------------------
+
 WelcomeMsg:     .DB $14,$0D,$0A,'ngd-monitor v0.1',$0D,$0A
 PromptMsg:      .DB $04, $0D,$0A,'? '
 
