@@ -405,7 +405,7 @@ PC_Loop:
 
 ;---------------------------------------------------------------------------------------------------
 ; DESCRIPTION:
-;   Converts a byte to two ASCII characters.
+;   Converts a byte to two ASCII hex characters.
 ; INPUTS:
 ;   Reg C: byte to convert
 ;   Reg HL: points to buffer with a minimum size of 2
@@ -415,14 +415,14 @@ PC_Loop:
 Byte2Hex:
         LD   A,$F0                      ; Mask off the lower nibble
         AND  C                          ; Reg. A now has the high nibble
-        RRCA                            ; move the high nibble to the low nibble
+        RRCA                            ; Move the high nibble to the low nibble
         RRCA                            ;
         RRCA                            ;
         RRCA                            ;
         CALL Nibble2Hex                 ; Convert the nibble to an ASCII char
-        LD   A,$0F                      ;
-        AND  C                          ;
-        CALL Nibble2Hex                 ; Conver the nibble to an ASCII char
+        LD   A,$0F                      ; Mask off the upper nibble
+        AND  C                          ; Reg. A now has the low nibble
+        CALL Nibble2Hex                 ; Convert the nibble to an ASCII char
 	RET
 
 Nibble2Hex:
@@ -437,7 +437,7 @@ N2H1:
 
 ;---------------------------------------------------------------------------------------------------
 ; DESCRIPTION:
-;   Converts two ASCII characters to a byte.
+;   Converts two ASCII hex characters to a byte.
 ; INPUTS:
 ;   Reg HL: points to buffer with a minimum size of 2
 ; OUTPUTS:
@@ -453,6 +453,7 @@ Hex2Byte:
         CALL Hex2Nibble                 ; Do the conversion
         INC  HL                         ; Point to the byte in the buffer afer the 2 character
         RET
+
 Hex2Nibble:
         SLA  C                          ; Align results
         SLA  C                          ;
@@ -466,10 +467,45 @@ H2N1:
         ADD  A,C                        ; Merge results
         LD   C,A                        ; Save in C
         RET
-        
+
 ;---------------------------------------------------------------------------------------------------
+; DESCRIPTION:
+;   Converts a word to four ASCII hex characters.
+; INPUTS:
+;   Reg BC: word to convert
+;   Reg HL: points to buffer with a minimum size of 4
+; OUTPUTS:
+;   Reg HL: point to the byte after the 4 byte buffer
+;---------------------------------------------------------------------------------------------------
+Word2Hex:
+        PUSH BC                         ; Save so we can recall it later
+        LD   C,B                        ; Get the high order byte first
+        CALL Byte2Hex                   ; Convert the high order byte.  HL will is prointing to the
+                                        ;   next empty slot in the buffer
+        POP  BC                         ; Retrieve the original value.  C has the low order byte
+        CALL Byte2Hex                   ; Convert the low order byte
+        RET
+
+;---------------------------------------------------------------------------------------------------
+; DESCRIPTION:
+;   Converts four ASCII hex characters to a word.
+; INPUTS:
+;   Reg HL: points to buffer with a minimum size of 4
+; OUTPUTS:
+;   Reg BC: value after the conversion
+;   Reg HL: point to the byte after the 4 byte buffer
+;---------------------------------------------------------------------------------------------------
+Hex2Word:
+        CALL Hex2Byte                   ; Convert the high order byte
+        LD   B,A                        ; Save the high order byte in B
+        CALL Hex2Byte                   ; Convert the low order byte
+        LD   C,A                        ; Save the low order byte in C
+        RET
 
 
+
+
+;---------------------------------------------------------------------------------------------------
 WelcomeMsg:     .DB $14,$0D,$0A,'ngd-monitor v0.1',$0D,$0A
 PromptMsg:      .DB $04, $0D,$0A,'? '
 
