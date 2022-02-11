@@ -264,7 +264,7 @@ GC1:
         CALL GetTtyStatus               ; C flag is set when receiver has a char
         JR   NC,GC1                     ; Loop until SIO flag a character is ready
         POP  AF
-        IN   A,(SIO_DATA)               ; Read the data from 
+        IN   A,(SIO_DATA)               ; Read the data from
         RET
 
 ;---------------------------------------------------------------------------------------------------
@@ -393,8 +393,17 @@ Byte2Hex:
         LD   A,$0F                      ; Mask off the upper nibble
         AND  C                          ; Reg. A now has the low nibble
         CALL Nibble2Hex                 ; Convert the nibble to an ASCII char
-	    RET
+	RET
 
+;---------------------------------------------------------------------------------------------------
+; DESCRIPTION:
+;   Converts a nibble (4 bits) to a ASCII hex character.
+; INPUTS:
+;   Reg C: nibble to convert (4 least significant bits)
+;   Reg HL: points to buffer with a minimum size of 2
+; OUTPUTS:
+;   Reg HL: point to the byte after the 2 byte buffer
+;---------------------------------------------------------------------------------------------------
 Nibble2Hex:
         ADD  A,$30                      ; Convert to 0 to 15
         CP   $3A                        ; If digit is 0 thru 9
@@ -494,35 +503,120 @@ PC_Loop:
         LD   DE,PromptMsg
         CALL PrintStr
 
-        LD   B,CmdBufferSize
-        LD   DE,CmdBuffer
-        CALL ReadStr
+	LD   BC,$000D
+	LD   DE,$001E
+	LD   HL,LineBuffer
+	CALL DumpRange
 
-        LD   A,KEY_CR
-        CALL PutCh
-        LD   A,KEY_LF
-        CALL PutCh
+;        LD   B,CmdBufferSize
+;        LD   DE,CmdBuffer
+;        CALL ReadStr
 
-        LD   DE,CmdBuffer
-        CALL PrintStr
+;        LD   A,KEY_CR
+;        CALL PutCh
+;        LD   A,KEY_LF
+;        CALL PutCh
+
+;        LD   DE,CmdBuffer
+;        CALL PrintStr
 
         JP   PC_Loop                    ; Do it all over again
 
+;---------------------------------------------------------------------------------------------------
+; DESCRIPTION:
+;   Dump a range of memory to the TTY output.  The start address is rounded down to the nearest 16
+;   byte boundry.  The end address is rounded up to the nearest 16 bit boundry.
+; INPUTS:
+;   Reg BC: start address
+;   Reg DE: end address
+;   Reg HL: points to the start of a buffer to hold one entire line before being sent to the TTY
+; OUTPUTS:
+;   None.
+; NOTES:
+;   The pointer in BC point to the next byte to print.  It is incremented and compared to DE.  The
+;   dump is complete when they match.  HL points to the next empty slot in the buffer.
+;---------------------------------------------------------------------------------------------------
+DumpRange:
+        LD   A,C                        ; Round down the starting address
+        AND  $F0                        ;
+        LD   C,A                        ;
+        LD   (DumpCurrent),BC           ; Save off the adjusted starting address
+                                        ;
+        LD   A,E                        ; Round up the ending address
+        AND  $F0                        ;
+        ADD  A,$10                      ;
+        LD   E,A                        ;
+	    LD   (DumpEnd),DE               ; Save off the adjusted ending address
+	                                    ;
+        LD   (HL),LineBufSize           ; Store the length of the string
+        INC  HL                         ; Point to the first free slot in the buffer
+	    LD   (LineBufPtr),HL		    ; Save off the buffer pointer
+DR1:
+	    LD   BC,(DumpCurrent)           ; Get the address of the current byte to display
+	    LD   HL,(DumpEnd)               ; Get the address of the last byte to display
+	    OR   A                          ; Clear the C flags
+        SBC  HL,BC                      ; Trick to do a 16 bit compare
+        ADD  HL,BC                      ;
+        JP   Z,DR2                      ; If DumpCurrent == DumpEnd then we are done
+
+	    LD   DE,(DumpCurrent)           ; IX points to the first of 16 bytes to convert
+	    LD   HL,LineBuffer              ; IY points the first byte of the buffer (the size)
+	    INC  HL                         ; The size has already been set, move to the second byte
+        CALL Dump16Bytes                ; Put the next sixteen bytes in the buffer
+	    LD   (DumpCurrent),DE           ; Save the updated pointer to the next byte to convert
+        LD   DE,LineBuffer              ; Input to PrintStr
+        CALL PrintStr                   ; Print the string to the TTY
+        JP   DR1                        ; Go back to the top of the loop
+DR2:
+        RET
+
+;---------------------------------------------------------------------------------------------------
+; DESCRIPTION:
+;   Converts 16 bytes of data to their ASCII hex representation and stores the ASCII characters in
+;   a buffer.
+; INPUTS:
+;   Reg DE: Address of the first byte to convert
+;   Reg HL: Address of the next open slot in the buffer
+; OUTPUTS:
+;   Reg DE: Address of the next byte to conver
+;   Reg HL: Address of the next open slot in the buffer
+;---------------------------------------------------------------------------------------------------
+
+Dump16Bytes:
+        LD   B,16                       ; B is the counter
+D16B1:
+        LD   A,KEY_SP                   ; Add a leading space
+        LD   (HL),A                     ;
+	    INC  HL                         ; Point to the next slot in the buffer
+
+        LD   A,(DE)                     ; Put the byte to convert into C
+	    LD   C,A                        ; C and HL are inputs to Byte2Hex
+        CALL Byte2Hex                   ; Convert the byte to hex and put it in the buffer
+	    INC  DE                         ; Point to the next byte
+        DJNZ D16B1                      ; If b > 0 then GOTO top of loop
+        RET
 
 ;---------------------------------------------------------------------------------------------------
 
-WelcomeMsg:     .DB $14,$0D,$0A,'ngd-monitor v0.1',$0D,$0A
-PromptMsg:      .DB $04, $0D,$0A,'? '
+WelcomeMsg      .DB   $14,$0D,$0A,'ngd-monitor v0.1',$0D,$0A
+PromptMsg       .DB   $04, $0D,$0A,'? '
 
-                .ORG $3000
-CmdBufferSize:  .EQU  40
-CmdBuffer:      .DEFS CmdBufferSize + 1     ; The first byte holds the length
+                .ORG  $3000
+CmdBufferSize   .EQU  40
+CmdBuffer       .DEFS CmdBufferSize + 1     ; The first byte holds the length
 
-HexBufferSize:  .EQU 4
+HexBufferSize   .EQU  4
 HexBuffer       .DEFS HexBufferSize + 1     ; The first byte hold the length
 
-                .ORG $37FF
-STACKTOP:       .EQU $
+LineBufSize     .EQU  71
+LineBuffer      .DEFS LineBufSize + 1       ; The first byte holds the length
+LineBufPtr      .DW   $0000
+
+DumpCurrent     .DW   $0000
+DumpEnd         .DW   $0000
+
+                .ORG  $37FF
+STACKTOP        .EQU  $
 
 
 
