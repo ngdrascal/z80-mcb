@@ -1,0 +1,79 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "type": "dezog",
+            "request": "launch",
+            "name": "Simulator - generic z80",
+            "remoteType": "zsim",
+            "zsim": {
+                "Z80N": false,
+                "visualMemory": false,
+                "memoryModel": "RAM",
+                "customCode": {
+                    "debug": true,
+                    "jsPath": "simulation/ports.js",
+                    "uiPath": "simulation/ui.html"
+                },
+                // "customMemory": {
+                //     "numberOfBanks": 32,
+                //     "banks": {
+                //         "0": "ROM",
+                //         "5": "RAM"
+                // }
+                "disassemblerArgs": {
+                    "numberOfLines": 20,
+                    "esxdosRst": true
+                },
+                // "memoryModel": "ZXNEXT",
+                // "ulaScreen": true,
+                // "zxBorderWidth": 20,
+                // "vsyncInterrupt": true,
+                // "zxKeyboard": true,
+                // "zxBeeper": true
+            },
+            "disassemblerArgs": {
+                "esxdosRst": true
+            },
+            // "sjasmplus": [
+            //     {
+            //         "path": "${workspaceFolder}\\software\\src\\ngd-monitor\\ngd-monitor.sld",
+            //     }
+            // ],
+            // "z88dk": [
+            //     {
+            //         "path": "${workspaceFolder}\\software\\src\\ngd-monitor\\ngd-monitor.ldy",
+            //         "srcDirs": [],
+            //         "mapFile": "${workspaceFolder}\\software\\src\\ngd-monitor\\ngd-monitor.map",
+            //         "mainFile": "${workspaceFolder}\\software\\src\\ngd-monitor\\ngd-monitor.a80",
+            //         "excludeFiles": []
+            //     }
+            // ],
+            "z80asm": [
+                {
+                    "path": "${workspaceFolder}\\software\\tools\\zout\\ngd-monitor.lst",
+                    "srcDirs": ["${workspaceFolder}\\software\\src\\ngd-monitor\\ngd-monitor.a80"],
+                    "excludeFiles": []
+                }
+            ],
+            "commandsAfterLaunch": [
+                // "-logpoint enable",
+                // "-assertion enable",
+                // "-wpmem enable"
+            ],
+            "startAutomatically": false,
+            "rootFolder": "${workspaceFolder}\\software\\src\\ngd-monitor",
+            // "load": "Add your .nex or .sna file to load",
+            "loadObjs": [
+                {
+                    "path": "${workspaceFolder}\\software\\tools\\zout\\ngd-monitor.cim",
+                    "start": "Reset"
+                }
+            ],
+            "topOfStack": "$37FF"
+        }
+    ]
+}
