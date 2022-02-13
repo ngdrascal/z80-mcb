@@ -281,7 +281,7 @@ PC1:
         CALL GetTtyStatus               ; Z flag is set when transmitter is busy
         JR   Z,PC1                      ; Loop until SIO flag signals ready
         POP  AF                         ; Retrieve character
-        OUT  (SIO_DATA),A              ; Output the character
+        OUT  (SIO_DATA),A               ; Output the character
         RET
 
 ;---------------------------------------------------------------------------------------------------
@@ -308,6 +308,26 @@ PSLoop:
 
         POP  BC
         POP  AF
+        RET
+
+;---------------------------------------------------------------------------------------------------
+; DESCRIPTION:
+;   Sends a $00 terminated string to the serial port.
+;   Example: .DB 'Monitor',$00
+; INPUTS:
+;   Reg DE: address of the first byte of the string
+; OUTPUTS:
+;   None.
+;---------------------------------------------------------------------------------------------------
+PrintStrZ:
+PSZLoop:
+        LD   A,(DE)                     ; Load the char to print into A
+        OR   A                          ; Check for a zero
+        INC  DE                         ; Point to the character (does not affect flags)
+        JR   Z,PSZDone                  ; Exit if this is the terminiating zero byte
+        CALL PutCh                      ; Send the char to the SIO
+        JR   PSZLoop                    ; Continue with the next char
+PSZDone:
         RET
 
 ;---------------------------------------------------------------------------------------------------
@@ -393,7 +413,7 @@ Byte2Hex:
         LD   A,$0F                      ; Mask off the upper nibble
         AND  C                          ; Reg. A now has the low nibble
         CALL Nibble2Hex                 ; Convert the nibble to an ASCII char
-	RET
+    RET
 
 ;---------------------------------------------------------------------------------------------------
 ; DESCRIPTION:
@@ -497,16 +517,18 @@ Hex2Word:
 ;   None.
 ;---------------------------------------------------------------------------------------------------
 ProcessCommands:
-        LD   DE,WelcomeMsg
-        CALL PrintStr
+;        LD   DE,WelcomeMsg
+;        CALL PrintStr
 PC_Loop:
-        LD   DE,PromptMsg
-        CALL PrintStr
+;        LD   DE,PromptMsg
+;        CALL PrintStr
 
-	LD   BC,$000D
-	LD   DE,$001E
-	LD   HL,LineBuffer
-	CALL DumpRange
+        LD   BC,TestData
+        LD   DE,TestData + 70
+        LD   HL,LineBuffer
+        CALL DumpRange
+
+        HALT
 
 ;        LD   B,CmdBufferSize
 ;        LD   DE,CmdBuffer
@@ -546,28 +568,48 @@ DumpRange:
         AND  $F0                        ;
         ADD  A,$10                      ;
         LD   E,A                        ;
-	    LD   (DumpEnd),DE               ; Save off the adjusted ending address
-	                                    ;
-        LD   (HL),LineBufSize           ; Store the length of the string
-        INC  HL                         ; Point to the first free slot in the buffer
-	    LD   (LineBufPtr),HL		    ; Save off the buffer pointer
+        LD   (DumpEnd),DE               ; Save off the adjusted ending address
 DR1:
-	    LD   BC,(DumpCurrent)           ; Get the address of the current byte to display
-	    LD   HL,(DumpEnd)               ; Get the address of the last byte to display
-	    OR   A                          ; Clear the C flags
+        LD   BC,(DumpCurrent)           ; Get the address of the current byte to display
+        LD   HL,(DumpEnd)               ; Get the address of the last byte to display
+        OR   A                          ; Clear the C flags
         SBC  HL,BC                      ; Trick to do a 16 bit compare
         ADD  HL,BC                      ;
-        JP   Z,DR2                      ; If DumpCurrent == DumpEnd then we are done
-
-	    LD   DE,(DumpCurrent)           ; IX points to the first of 16 bytes to convert
-	    LD   HL,LineBuffer              ; IY points the first byte of the buffer (the size)
-	    INC  HL                         ; The size has already been set, move to the second byte
-        CALL Dump16Bytes                ; Put the next sixteen bytes in the buffer
-	    LD   (DumpCurrent),DE           ; Save the updated pointer to the next byte to convert
+        JP   Z,DR2                      ; IF DumpCurrent .EQ. DumpEnd THEN we are done
+                                        ;
+        LD   HL,LineBuffer              ; HL points the first byte of the buffer
+        CALL AppendAddr                 ; Put the address followed by a colon in the buffer
+                                        ;
+        LD   DE,(DumpCurrent)           ; DE points to the first of 16 bytes to convert
+        CALL Append16Hex                ; Put the next sixteen bytes in the buffer
+                                        ;
+        LD   DE,(DumpCurrent)           ; DE points to the first of 16 bytes to convert
+        CALL Apppend16Ascii             ; Append the printable ASCII reprentations of the bytes in the buffer
+                                        ;
+        LD   (DumpCurrent),DE           ; Save the updated pointer.  It points to the first of the next set of 16
+                                        ;
+        CALL AppendCrLf                 ; Hmm, is this self documenting code?
+                                        ;
         LD   DE,LineBuffer              ; Input to PrintStr
-        CALL PrintStr                   ; Print the string to the TTY
+        CALL PrintStrZ                  ; Print the string to the TTY
         JP   DR1                        ; Go back to the top of the loop
 DR2:
+        RET
+
+;---------------------------------------------------------------------------------------------------
+; DESCRIPTION:
+;   Appends a 16 bit address to the line buffer
+; INPUTS:
+;   Reg BC: Address value to dump
+;   Reg HL: points to the start of a buffer with a minimum size of 5 ("1234:")
+; OUTPUTS:
+;   Reg HL: Address of the next open slot in the buffer
+;---------------------------------------------------------------------------------------------------
+AppendAddr:
+        CALL Word2Hex                   ; Do the conversion
+        LD   A,':'                      ; print a colon
+        LD   (HL),A
+        INC  HL
         RET
 
 ;---------------------------------------------------------------------------------------------------
@@ -578,39 +620,97 @@ DR2:
 ;   Reg DE: Address of the first byte to convert
 ;   Reg HL: Address of the next open slot in the buffer
 ; OUTPUTS:
-;   Reg DE: Address of the next byte to conver
+;   Reg DE: Address of the next byte to convert
 ;   Reg HL: Address of the next open slot in the buffer
 ;---------------------------------------------------------------------------------------------------
 
-Dump16Bytes:
+Append16Hex:
         LD   B,16                       ; B is the counter
-D16B1:
+A16H_Loop:
         LD   A,KEY_SP                   ; Add a leading space
         LD   (HL),A                     ;
-	    INC  HL                         ; Point to the next slot in the buffer
+        INC  HL                         ; Point to the next slot in the buffer
 
         LD   A,(DE)                     ; Put the byte to convert into C
-	    LD   C,A                        ; C and HL are inputs to Byte2Hex
+        LD   C,A                        ; C and HL are inputs to Byte2Hex
         CALL Byte2Hex                   ; Convert the byte to hex and put it in the buffer
-	    INC  DE                         ; Point to the next byte
-        DJNZ D16B1                      ; If b > 0 then GOTO top of loop
+        INC  DE                         ; Point to the next byte
+        DJNZ A16H_Loop                  ; If b > 0 then GOTO top of loop
+        RET
+
+;---------------------------------------------------------------------------------------------------
+; DESCRIPTION:
+;   Converts 16 bytes of data to their ASCII representation and stores the ASCII characters in
+;   a buffer.  If a byte is outsize the printable range (32 .. 127) a period is used to represent
+;   the value.
+; INPUTS:
+;   Reg DE: Address of the first byte to convert
+;   Reg HL: Address of the next open slot in the buffer
+; OUTPUTS:
+;   Reg DE: Address of the next byte to convert
+;   Reg HL: Address of the next open slot in the buffer
+; NOTES:
+;   If A < N, then C flag is set.
+;   If A >= N, then C flag is reset.
+;---------------------------------------------------------------------------------------------------
+Apppend16Ascii:
+        LD   B,16                       ; B is the counter
+        LD   C,KEY_SP                   ; Append a leading space
+        LD   (HL),C                     ;
+        INC  HL                         ; Point to the next slot in the line buffer
+A16A_Loop:
+        LD   A,(DE)                     ; Load the current byte into C
+        LD   C,A                        ;
+                                        ;
+        LD   A,KEY_SP                   ; Load A with the ASCII value for <space>
+        CP   C                          ;
+        JR   Z,A16A_Append              ; C .EQ. <space>, just append it
+        JR   NC,A16A_Dot                ; IF a .LT. <space> THEN replace with a period
+                                        ;
+        LD   A,127                      ; Load A with the ASCII value for <del>
+        CP   C                          ;
+        JR   Z,A16A_Dot                 ; IF .EQ. <del> THEN replace with a period
+        JR   C,A16A_Dot                 ; IF .GT. <del> THEN replace with a period
+        JR   A16A_Append                ; The byte is in the printable range, just append as is
+A16A_Dot:
+        LD   C,'.'                      ; replace with a period
+A16A_Append:
+        LD   (HL),C                     ; Append the char to the buffer
+        INC  HL                         ; Point to the next slot in the line buffer
+        INC  DE                         ; Point to the next byte to process
+        DJNZ A16A_Loop                  ; If b > 0 then GOTO top of loop
+        RET
+
+;---------------------------------------------------------------------------------------------------
+; DESCRIPTION:
+;   Appends a carrage return and a line feed to the
+; INPUTS:
+;   Reg HL: Address of the next open slot in the buffer
+; OUTPUTS:
+;   Reg HL: Address of the next open slot in the buffer
+;----------------------------------------------------------------------------------------------
+AppendCrLf:
+        LD   C,KEY_CR                   ; Append a CR to the buffer
+        LD   (HL),C                     ;
+        INC  HL                         ; Point to the next slot in the buffer
+        LD   C,KEY_LF                   ; Append a LF to the buffer
+        LD   (HL),C                     ;
+        INC  HL                         ; Point to the next slot in the buffer
         RET
 
 ;---------------------------------------------------------------------------------------------------
 
-WelcomeMsg      .DB   $14,$0D,$0A,'ngd-monitor v0.1',$0D,$0A
-PromptMsg       .DB   $04, $0D,$0A,'? '
+WelcomeMsg      .DB   KEY_CR,KEY_LF,'ngd-monitor v0.1',KEY_CR,KEY_LF,$00
+PromptMsg       .DB   KEY_CR,KEY_LF,'? ',$00
+
+TestData        .DB   'Now is the time for all good men to come to the aid of their country.',$00
 
                 .ORG  $3000
 CmdBufferSize   .EQU  40
 CmdBuffer       .DEFS CmdBufferSize + 1     ; The first byte holds the length
 
-HexBufferSize   .EQU  4
-HexBuffer       .DEFS HexBufferSize + 1     ; The first byte hold the length
-
-LineBufSize     .EQU  71
-LineBuffer      .DEFS LineBufSize + 1       ; The first byte holds the length
-LineBufPtr      .DW   $0000
+LineBufMax      .EQU  80                    ; Max number of chacter in a line
+LineBuffer      .DEFS LineBufMax + 1        ; Add 1 to the size so the full 80 chars can be printed
 
 DumpCurrent     .DW   $0000
 DumpEnd         .DW   $0000
@@ -618,7 +718,7 @@ DumpEnd         .DW   $0000
                 .ORG  $37FF
 STACKTOP        .EQU  $
 
-
+                .END
 
 
 
