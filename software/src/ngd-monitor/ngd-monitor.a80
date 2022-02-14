@@ -50,7 +50,6 @@ KEY_SP          .EQU $20
              .ORG $0000
 Reset:
         DI                              ; Disable interrupts while configuring the system
-        LD   SP,STACKTOP                ; Initialize the stack pointer
         JP   ColdBoot                   ; Initialize the hardware
 
 ;---------------------------------------------------------------------------------------------------
@@ -120,6 +119,7 @@ ISR:
 ;   None.
 ;---------------------------------------------------------------------------------------------------
 ColdBoot:
+        LD   SP,STACKTOP                ; Initialize the stack pointer
         IM   1                          ; Interrupt Mode = 1, address $0038 is the hander
         CALL Init8253
         CALL InitSio
@@ -413,7 +413,7 @@ Byte2Hex:
         LD   A,$0F                      ; Mask off the upper nibble
         AND  C                          ; Reg. A now has the low nibble
         CALL Nibble2Hex                 ; Convert the nibble to an ASCII char
-    RET
+        RET
 
 ;---------------------------------------------------------------------------------------------------
 ; DESCRIPTION:
@@ -517,11 +517,11 @@ Hex2Word:
 ;   None.
 ;---------------------------------------------------------------------------------------------------
 ProcessCommands:
-;        LD   DE,WelcomeMsg
-;        CALL PrintStr
+        LD   DE,WelcomeMsg
+        CALL PrintStrZ
 PC_Loop:
-;        LD   DE,PromptMsg
-;        CALL PrintStr
+        ; LD   DE,PromptMsg
+        ; CALL PrintStrZ
 
         LD   BC,TestData
         LD   DE,TestData + 70
@@ -589,6 +589,9 @@ DR1:
         LD   (DumpCurrent),DE           ; Save the updated pointer.  It points to the first of the next set of 16
                                         ;
         CALL AppendCrLf                 ; Hmm, is this self documenting code?
+
+        LD   C,$00                      ; Append a zero the end of string marker
+        LD   (HL),C                     ;
                                         ;
         LD   DE,LineBuffer              ; Input to PrintStr
         CALL PrintStrZ                  ; Print the string to the TTY
@@ -700,7 +703,7 @@ AppendCrLf:
 
 ;---------------------------------------------------------------------------------------------------
 
-WelcomeMsg      .DB   KEY_CR,KEY_LF,'ngd-monitor v0.1',KEY_CR,KEY_LF,$00
+WelcomeMsg      .DB   KEY_CR,KEY_LF,'ngd-monitor v0.1',KEY_CR,KEY_LF,KEY_CR,KEY_LF,$00
 PromptMsg       .DB   KEY_CR,KEY_LF,'? ',$00
 
 TestData        .DB   'Now is the time for all good men to come to the aid of their country.',$00
@@ -712,8 +715,8 @@ CmdBuffer       .DEFS CmdBufferSize + 1     ; The first byte holds the length
 LineBufMax      .EQU  80                    ; Max number of chacter in a line
 LineBuffer      .DEFS LineBufMax + 1        ; Add 1 to the size so the full 80 chars can be printed
 
-DumpCurrent     .DW   $0000
-DumpEnd         .DW   $0000
+DumpCurrent     .DEFS 2
+DumpEnd         .DEFS 2
 
                 .ORG  $37FF
 STACKTOP        .EQU  $
