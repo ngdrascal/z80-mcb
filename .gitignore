@@ -5,17 +5,13 @@ software/src/ngd-monitor/*.bin
 software/src/ngd-monitor/*.sld
 software/src/ngd-monitor/simulation/**
 .tmp/disasm.asm
+*.zip
+fp-info-cache
 
 hardware/BreadboardAdapter26/BreadboardAdapter26-backups/**
-hardware/BreadboardAdapter26/Gerber Files/*.zip
-hardware/BreadboardAdapter26/fp-info-cache
-hardware/BreadboardAdapter26/BreadboardAdapter26.xml
 
 hardware/BreadboardAdapter40/BreadboardAdapter40-backups/**
-hardware/BreadboardAdapter40/Gerber Files/*.zip
 
 hardware/RS232TTL_Adaper/RS232TTL_Adaper-backups/**
-hardware/RS232TTL_Adaper/Gerber Files/*.zip
 
 hardware/SerialClockFlyover/SerialClockFlyover-backups/**
-hardware/SerialClockFlyover/Gerber Files/*.zip
