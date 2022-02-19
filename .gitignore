@@ -9,7 +9,6 @@ software/src/ngd-monitor/simulation/**
 hardware/BreadboardAdapter26/BreadboardAdapter26-backups/**
 hardware/BreadboardAdapter26/Gerber Files/*.zip
 hardware/BreadboardAdapter26/fp-info-cache
-hardware/BreadboardAdapter26/fp-lib-table
 hardware/BreadboardAdapter26/BreadboardAdapter26.xml
 
 hardware/BreadboardAdapter40/BreadboardAdapter40-backups/**
