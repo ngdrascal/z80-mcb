@@ -5,18 +5,18 @@ software/src/ngd-monitor/*.bin
 software/src/ngd-monitor/*.sld
 software/src/ngd-monitor/simulation/**
 .tmp/disasm.asm
-hardware/BreadboardAdapter26/BreadboardAdapter26-backups/BreadboardAdapter26-2022-02-16_121223.zip
+
+hardware/BreadboardAdapter26/BreadboardAdapter26-backups/**
+hardware/BreadboardAdapter26/Gerber Files/*.zip
 hardware/BreadboardAdapter26/fp-info-cache
 hardware/BreadboardAdapter26/fp-lib-table
-hardware/BreadboardAdapter26/Gerber Files/BreadboardAdapter26-B_Cu.gbl
-hardware/BreadboardAdapter26/Gerber Files/BreadboardAdapter26-B_Mask.gbs
-hardware/BreadboardAdapter26/Gerber Files/BreadboardAdapter26-B_Silkscreen.gbo
-hardware/BreadboardAdapter26/Gerber Files/BreadboardAdapter26-Edge_Cuts.gm1
-hardware/BreadboardAdapter26/Gerber Files/BreadboardAdapter26-F_Cu.gtl
-hardware/BreadboardAdapter26/Gerber Files/BreadboardAdapter26-F_Mask.gts
-hardware/BreadboardAdapter26/Gerber Files/BreadboardAdapter26-F_Silkscreen.gto
-hardware/BreadboardAdapter26/Gerber Files/BreadboardAdapter26-job.gbrjob
-hardware/BreadboardAdapter26/Gerber Files/BreadboardAdapter26.drl
 hardware/BreadboardAdapter26/BreadboardAdapter26.xml
-hardware/BreadboardAdapter40/BreadboardAdapter40-backups/BreadboardAdapter40-2022-02-16_123910.zip
-hardware/BreadboardAdapter26/BreadboardAdapter26-backups/BreadboardAdapter26-2022-02-16_123018.zip
+
+hardware/BreadboardAdapter40/BreadboardAdapter40-backups/**
+hardware/BreadboardAdapter40/Gerber Files/*.zip
+
+hardware/RS232TTL_Adaper/RS232TTL_Adaper-backups/**
+hardware/RS232TTL_Adaper/Gerber Files/*.zip
+
+hardware/SerialClockFlyover/SerialClockFlyover-backups/**
+hardware/SerialClockFlyover/Gerber Files/*.zip
