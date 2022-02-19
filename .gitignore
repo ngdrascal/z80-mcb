@@ -8,6 +8,7 @@ software/src/ngd-monitor/simulation/**
 *.zip
 fp-info-cache
 *.kicad_prl
+*.bak
 
 hardware/BreadboardAdapter26/BreadboardAdapter26-backups/**
 
