@@ -12,6 +12,8 @@ SIOA_DATA       .EQU $74
 SIOA_CMD        .EQU $76
 SIOB_DATA       .EQU $75
 SIOB_CMD        .EQU $77
+SIO_CMD         .EQU SIOB_CMD
+SIO_DATA        .EQU SIOB_DATA
 
                 .ORG $37FF
 STACK           .EQU $
@@ -29,39 +31,38 @@ Init8253:
         OUT  (I8253_CNT0),A
 
 InitSIO:
-        ; Channel B
         LD   A,$00                      ; select WR0
-        OUT  (SIOB_CMD),A
+        OUT  (SIO_CMD),A
         LD   A,$18                      ; channel reset
-        OUT  (SIOB_CMD),A
+        OUT  (SIO_CMD),A
 
         LD   A,$04                      ; select WR4
-        OUT  (SIOB_CMD),A
+        OUT  (SIO_CMD),A
         LD   A,$44                      ; $44 = Clock-Mode: 16x; Stop-Bits: 1; Parity: none
-        OUT  (SIOB_CMD),A
+        OUT  (SIO_CMD),A
 
         LD   A,$01                      ; select WR1
-        OUT  (SIOB_CMD),A
+        OUT  (SIO_CMD),A
         LD   A,$00                      ; $00 = waiting: off; interrupts: off
-        OUT  (SIOB_CMD),A
+        OUT  (SIO_CMD),A
 
         LD   A,$03                      ; select WR3
-        OUT  (SIOB_CMD),A
+        OUT  (SIO_CMD),A
         LD   A,$E1                      ; $E1 = Rx 8 bits/char; Auto-Enables is true; Rx-Enabled = true;
-        OUT  (SIOB_CMD),A
+        OUT  (SIO_CMD),A
 
         LD   A,$05                      ; select WR5
-        OUT  (SIOB_CMD),A
+        OUT  (SIO_CMD),A
         LD   A,$68                      ; $EA = DTR = false; Tx 8 bits/chars; Send-Break = false; Tx = true; RTS = false
-        OUT  (SIOB_CMD),A
+        OUT  (SIO_CMD),A
 
         LD   DE,message
         CALL PrintStr
 
         ; echo input chars back to output
 Infinity:
-        CALL RxCharB                    ; output- A reg: character from input
-        CALL TxCharB                    ; input-  A reg: has character to output
+        CALL RxChar                     ; output- A reg: character from input
+        CALL TxChar                     ; input-  A reg: has character to output
         JP   Infinity
 
 ;===============================================================================
@@ -76,8 +77,8 @@ Infinity:
 ;-------------------------------------------------------------------------------
 SioStatus:
         LD   A,$00                      ; Select Register 0
-        OUT  (SIOB_CMD),A               ;
-        IN   A,(SIOB_CMD)               ; Get status word
+        OUT  (SIO_CMD),A                ;
+        IN   A,(SIO_CMD)                ; Get status word
         RRCA                            ; Rotate RX status ready into CY flag
         BIT  1,A                        ; Test bit 1 for TX buffer empty, this will set the Z flag
         RET
@@ -90,13 +91,13 @@ SioStatus:
 ; OUTPUTS:
 ;   <none>
 ;-------------------------------------------------------------------------------
-TxCharB:
+TxChar:
         PUSH AF
-TxCharB1:
+TxChar1:
         CALL SioStatus                  ; Z = 0 when transmitter is busy
-        JR   Z,TxCharB1                 ; Loop until SIO flag signals ready
+        JR   Z,TxChar1                  ; Loop until SIO flag signals ready
         POP  AF                         ; Retrieve character
-        OUT  (SIOB_DATA),A              ; Output the character
+        OUT  (SIO_DATA),A               ; Output the character
         RET
 
 ;===============================================================================
@@ -108,13 +109,13 @@ TxCharB1:
 ; OUTPUTS:
 ;   A reg: character retrieved
 ;-------------------------------------------------------------------------------
-RxCharB:
+RxChar:
         PUSH AF
-RxCharB1:
+RxChar1:
         CALL SioStatus                  ; C = 0 when transmitter is busy
-        JR   NC,RxCharB1                ; Loop until SIO flag a character is ready
+        JR   NC,RxChar1                 ; Loop until SIO flag a character is ready
         POP  AF
-        IN   A,(SIOB_DATA)              ; Read the data from 
+        IN   A,(SIO_DATA)              ; Read the data from 
         RET
 
 ;===============================================================================
@@ -137,7 +138,7 @@ PrintStr:
 PSLoop:
         INC  DE                         ; Point to the next printable char
         LD   A,(DE)                     ; Load the char to print into A
-        CALL TxCharB                    ; Send the char to the SIO
+        CALL TxChar                     ; Send the char to the SIO
         DJNZ PSLoop                     ; And repeat until done
 
         POP  B
