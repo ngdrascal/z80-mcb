@@ -49,6 +49,8 @@ SIOA_DATA       .EQU 74H
 SIOA_CMD        .EQU 76H
 SIOB_DATA       .EQU 75H
 SIOB_CMD        .EQU 77H
+SIO_DATA        .EQU SIOA_DATA          ; Make it easy to change between the A and B ports
+SIO_CMD         .EQU SIOA_CMD
 
 I8253_CTRL      .EQU 6FH
 I8253_CNT0      .EQU 6CH
@@ -1408,29 +1410,29 @@ init8253:
 initSIO:
         ; Channel B
         LD   A,00H                      ; select WR0
-        OUT  (SIOB_CMD),A
+        OUT  (SIO_CMD),A
         LD   A,18H                      ; channel reset
-        OUT  (SIOB_CMD),A
+        OUT  (SIO_CMD),A
 
         LD   A,04H                      ; select WR4
-        OUT  (SIOB_CMD),A
+        OUT  (SIO_CMD),A
         LD   A,44H                      ; $44 = Clock-Mode: 16x; Stop-Bits: 1; Parity: none
-        OUT  (SIOB_CMD),A
+        OUT  (SIO_CMD),A
 
         LD   A,01H                      ; select WR1
-        OUT  (SIOB_CMD),A
+        OUT  (SIO_CMD),A
         LD   A,00H                      ; $00 = waiting: off; interrupts: off
-        OUT  (SIOB_CMD),A
+        OUT  (SIO_CMD),A
 
         LD   A,03H                      ; select WR3
-        OUT  (SIOB_CMD),A
+        OUT  (SIO_CMD),A
         LD   A,0E1H                     ; $E1 = Rx 8 bits/char; Auto-Enables is true; Rx-Enabled = true;
-        OUT  (SIOB_CMD),A
+        OUT  (SIO_CMD),A
 
         LD   A,05H                      ; select WR5
-        OUT  (SIOB_CMD),A
+        OUT  (SIO_CMD),A
         LD   A,68H                      ; $EA = DTR = false; Tx 8 bits/chars; Send-Break = false; Tx = true; RTS = false
-        OUT  (SIOB_CMD),A
+        OUT  (SIO_CMD),A
 
 PATLOP:
         CALL CRLF
@@ -1448,11 +1450,11 @@ PATLOP:
 OC2:    JNZ  OC3                        ;IT IS ON
         POP  PSW                        ;IT IS OFF
         RET                             ;RESTORE AF AND RETURN
-OC3:    IN   A,(SIOB_CMD)               ;Check status
+OC3:    IN   A,(SIO_CMD)                ;Check status
         BIT  2,A                        ;STATUS BIT
         JP   Z,OC3                      ;NOT READY, WAIT
         POP  AF                         ;READY, GET OLD A BACK
-        OUT  (SIOB_DATA),A              ;Out to data port
+        OUT  (SIO_DATA),A               ;Out to data port
         CP   CR                         ;WAS IT CR?
         RET  NZ                         ;NO, FINISHED
         LD   A,LF                       ;YES, WE SEND LF TOO
@@ -1460,11 +1462,11 @@ OC3:    IN   A,(SIOB_CMD)               ;Check status
         LD   A,CR                       ;GET CR BACK IN A
         RET
 ;
-CHKIO:  IN   (SIOB_CMD)                ;*** CHKIO ***
+CHKIO:  IN   (SIO_CMD)                  ;*** CHKIO ***
         NOP                             ;STATUS BIT FLIPPED?
         BIT  0,A                        ;MASK STATUS BIT
         RET  Z                          ;NOT READY, RETURN "Z"
-        IN   (SIOB_DATA)                ;READY, READ DATA
+        IN   (SIO_DATA)                 ;READY, READ DATA
         AND  7FH                        ;MASK BIT 7 OFF
         CP   0FH                        ;IS IT CONTROL-O?
         JP   NZ,CI1                     ;NO, MORE CHECKING
