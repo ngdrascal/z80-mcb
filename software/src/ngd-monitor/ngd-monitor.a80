@@ -18,8 +18,8 @@ SIOA_DATA       .EQU $74
 SIOA_CMD        .EQU $76
 SIOB_DATA       .EQU $75
 SIOB_CMD        .EQU $77
-SIO_DATA        .EQU SIOB_DATA          ; Make it easy to change between the A and B ports
-SIO_CMD         .EQU SIOB_CMD
+SIO_DATA        .EQU SIOA_DATA          ; Make it easy to change between the A and B ports
+SIO_CMD         .EQU SIOA_CMD
 
 I8253_CTRL      .EQU $6F
 I8253_CTR0      .EQU $6C
