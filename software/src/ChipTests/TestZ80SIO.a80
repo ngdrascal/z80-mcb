@@ -12,8 +12,10 @@ SIOA_DATA       .EQU $74
 SIOA_CMD        .EQU $76
 SIOB_DATA       .EQU $75
 SIOB_CMD        .EQU $77
-SIO_CMD         .EQU SIOB_CMD
-SIO_DATA        .EQU SIOB_DATA
+
+; Only need to change this to switch between the A and B channels
+SIO_CMD         .EQU SIOA_CMD
+SIO_DATA        .EQU SIOA_DATA
 
                 .ORG $37FF
 STACK           .EQU $
